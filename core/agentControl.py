@@ -23,54 +23,24 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]], thread_id=None, tags
     out: List[Dict[str, Any]] = []
     for st in steps:
         s = Step(**st)
-        log_event(
-            trace_id,
-            "decision",
-            "planner:step",
-            {"tool": s.tool, "args": s.args, "tags": tags or []},
-        )
-
+        log_event(trace_id, "decision", "planner:step", {"tool": s.tool, "args": s.args, "tags": tags or []})
+        try:
+            spec = get(s.tool)
+        except KeyError:
+            log_event(trace_id, "decision", "tool:lookup_error", {"tool": s.tool, "args": s.args, "tags": tags or []})
+            raise
         t0 = time.time()
         ok = "true"
         tokens = 0
         try:
-            if s.tool in {"llm", "__llm__"}:
-                prompt_text = s.args.get("prompt", prompt)
-                other = {k: v for k, v in s.args.items() if k != "prompt"}
-                text = provider.generate(prompt_text, **other)
-                res = {"text": text}
-            else:
-                spec = get(s.tool)
-                res = spec.run(s.args)
-
-            tag_str = ",".join(tags or [])
-            tool_calls_total.labels(s.tool, "true", tag_str).inc()
-            tool_latency_ms.labels(s.tool, tag_str).observe((time.time() - t0) * 1000.0)
-            log_event(
-                trace_id,
-                "decision",
-                "tool:done",
-                {
-                    "tool": s.tool,
-                    "ms": int((time.time() - t0) * 1000),
-                    "tags": tags or [],
-                },
-            )
+            res = spec.run(s.args)
+            tool_calls_total.labels(s.tool, "true").inc()
+            tool_latency_ms.labels(s.tool).observe((time.time()-t0)*1000.0)
+            log_event(trace_id, "decision", "tool:result", {"tool": s.tool, "ms": int((time.time()-t0)*1000), "ok": True, "output": res})
             out.append({"tool": s.tool, "output": res})
         except Exception as e:
-            tag_str = ",".join(tags or [])
-            tool_calls_total.labels(s.tool, "false", tag_str).inc()
-            log_event(
-                trace_id,
-                "decision",
-                "tool:error",
-                {
-                    "tool": s.tool,
-                    "ms": int((time.time() - t0) * 1000),
-                    "error": str(e),
-                    "tags": tags or [],
-                },
-            )
+            tool_calls_total.labels(s.tool, "false").inc()
+            log_event(trace_id, "decision", "tool:result", {"tool": s.tool, "ms": int((time.time()-t0)*1000), "ok": False, "error": type(e).__name__, "msg": str(e)})
             raise
 
     return {"trace_id": trace_id, "outputs": out}
