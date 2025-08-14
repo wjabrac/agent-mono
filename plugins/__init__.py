@@ -1,0 +1,1 @@
+# Plugin package marker. Individual modules expose a variable named `spec` of type ToolSpec for discovery.

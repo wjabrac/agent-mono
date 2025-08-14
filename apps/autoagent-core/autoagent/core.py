@@ -35,6 +35,18 @@ from autoagent.fn_call_converter import convert_tools_to_description, convert_no
 from litellm.types.utils import Message as litellmMessage
 # litellm.set_verbose=True
 # client = AsyncOpenAI()
+
+def _is_local_model(model_name: str) -> bool:
+    mn = (model_name or "").lower()
+    return mn.startswith("ollama/") or mn.startswith("local/")
+
+def _ensure_model_allowed(model_name: str) -> None:
+    allow_paid = os.getenv("ALLOW_PAID_APIS", "false").lower() in ("1","true","yes","on")
+    if not _is_local_model(model_name) and not allow_paid:
+        raise RuntimeError(
+            f"Model '{model_name}' appears to be a remote/paid API. Set ALLOW_PAID_APIS=true to proceed."
+        )
+
 def should_retry_error(exception):
     if MC_MODE is False: print(f"Caught exception: {type(exception).__name__} - {str(exception)}")
     
@@ -142,6 +154,7 @@ class MetaChain:
             if __CTX_VARS_NAME__ in params["required"]:
                 params["required"].remove(__CTX_VARS_NAME__)
         create_model = model_override or agent.model
+        _ensure_model_allowed(create_model)
 
         if "gemini" in create_model.lower():
             tools = adapt_tools_for_gemini(tools)

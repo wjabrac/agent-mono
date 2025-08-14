@@ -1,0 +1,7 @@
+global: 100000
+tools:
+  web_fetch: 50000
+  pdf_text: 25000
+tags:
+  high_priority: 80000
+  low_priority: 20000
