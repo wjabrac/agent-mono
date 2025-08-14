@@ -4,7 +4,7 @@ from core.tools.registry import discover, get, _REGISTRY  # type: ignore
 from core.trace_context import set_trace
 from core.observability.trace import start_trace, log_event
 from core.observability.metrics import tool_calls_total, tool_latency_ms, tool_skipped_total
-from core.memory.db import cache_get, cache_put
+from core.memory.db import cache_get, cache_put, kv_put
 import time, os, json, hashlib, concurrent.futures, threading
 
 # Manifest usage tracking
@@ -53,13 +53,15 @@ except Exception:
 
 # Policy and sandbox
 try:
-    from core.security.policy import check_tool_allowed, is_risky_tool  # type: ignore
+    from core.security.policy import check_tool_allowed, is_risky_tool, enforce_output_limits  # type: ignore
     from core.security.sandbox import run_in_sandbox  # type: ignore
 except Exception:
     def check_tool_allowed(tool_name: str, args: Dict[str, Any]) -> None:  # type: ignore
         return
     def is_risky_tool(tool_name: str) -> bool:  # type: ignore
         return False
+    def enforce_output_limits(tool_name: str, output: Any) -> None:  # type: ignore
+        return
     def run_in_sandbox(fn, args, timeout_s=20):  # type: ignore
         return fn(args)
 
@@ -129,6 +131,7 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
                     fut = ex.submit(spec.run, step.args)
                     res = fut.result(timeout=step.timeout_s)
+            enforce_output_limits(step.tool, res)
             tool_calls_total.labels(step.tool, "true").inc()
             tool_latency_ms.labels(step.tool).observe((time.time()-t0)*1000.0)
             if step.ttl_s:
@@ -154,6 +157,7 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
                 fut = ex.submit(fb_spec.run, step.args)
                 res = fut.result(timeout=step.timeout_s)
+            enforce_output_limits(fb, res)
             log_event(trace_id, "decision", "executor:fallback", {"from": step.tool, "to": fb})
             tool_calls_total.labels(fb, "true").inc()
             try:
@@ -255,6 +259,12 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
                 remaining.remove(i)
             break
         wave = [schedule[i] for i in ready]
+        # hot-reload registry if enabled between waves
+        try:
+            from core.tools.registry import reload_if_needed  # type: ignore
+            reload_if_needed()
+        except Exception:
+            pass
         if len(wave) > 1 and _needs_hitl(wave):
             _await_human_approval("phase:wave_start", wave)
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(wave))) as ex:
@@ -267,6 +277,11 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
                 try:
                     res = fut.result()
                     out.append(res)
+                    # persist to session memory for contextual recall
+                    try:
+                        kv_put(thread_id, f"step:{s.tool}", json.dumps(res))
+                    except Exception:
+                        pass
                 except Exception as e:
                     # Mark dependents as prior_error
                     for i in list(remaining):
@@ -283,6 +298,10 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
             try:
                 res = _run_with_policy(Step(**st), trace_id)
                 out.append(res)
+                try:
+                    kv_put(thread_id, f"step:{st.get('tool','')}", json.dumps(res))  # type: ignore
+                except Exception:
+                    pass
             except Exception:
                 pass
     return {"trace_id": trace_id, "outputs": out}

@@ -84,6 +84,42 @@ def _discover_microtools_from_dirs() -> None:
                     continue
 
 
+def _discover_templates() -> None:
+    path = os.getenv("TEMPLATES_PATH", "data/templates.json")
+    if not os.path.exists(path):
+        return
+    try:
+        from core.instrumentation import instrument_tool
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        for name, body in data.items():
+            steps = body.get("steps") or []
+            desc = body.get("description", "")
+            # Build a thin wrapper that returns predefined steps, allowing param injection
+            def _make(name, steps, desc):
+                @instrument_tool(name)
+                def _run(args: Dict[str, Any]) -> Dict[str, Any]:
+                    from copy import deepcopy
+                    # naive parameter substitution: ${var}
+                    s = deepcopy(steps)
+                    params = args or {}
+                    import re
+                    def _subst(val):
+                        if isinstance(val, str):
+                            for k,v in params.items():
+                                val = re.sub(r"\\$\\{"+re.escape(k)+r"\\}", str(v), val)
+                        return val
+                    for st in s:
+                        st["args"] = {k: _subst(v) for k,v in (st.get("args") or {}).items()}
+                    return {"steps": s}
+                return _run
+            run = _make(name, steps, desc)
+            register(ToolSpec(name=name, input_model=None, run=run))
+            ensure_tool_entry(name, path=path, tags=["template"], composite_of=[st.get("tool") for st in steps], description=desc)
+    except Exception:
+        return
+
+
 def discover(package: str = "plugins") -> None:
     if os.getenv("ENABLE_MCP", "true").lower() in ("1","true","yes"):
         try:
@@ -95,6 +131,7 @@ def discover(package: str = "plugins") -> None:
             _do_discover(package)
             _DISCOVERED_PACKAGES.append(package)
         _discover_microtools_from_dirs()
+        _discover_templates()
         _load_remote_tools_from_config()
         global _last_load_ts
         _last_load_ts = time.time()
@@ -117,3 +154,4 @@ def reload_if_needed() -> None:
         except Exception:
             continue
     _discover_microtools_from_dirs()
+    _discover_templates()

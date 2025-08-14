@@ -1,5 +1,5 @@
 import os, json
-from typing import Any
+from typing import Any, List, Dict
 
 ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() in ("1","true","yes")
 VENDOR = os.getenv("SEMANTIC_VENDOR", "qdrant")
@@ -79,3 +79,34 @@ def maybe_index_event(event_id: str, trace_id: str, phase: str, role: str, paylo
 			client.index(_collection).add_documents([{ "id": event_id, "trace_id": trace_id, "text": text, "vector": vec }])
 		except Exception:
 			return
+
+
+def semantic_query(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+	"""Search previously indexed events/documents.
+
+	Returns a list of {"trace_id", "text", "score"}.
+	If semantic search is disabled or clients are unavailable, return [].
+	"""
+	if not ENABLE_SEMANTIC_SEARCH:
+		return []
+	model = _ensure_model(); client = _ensure_client()
+	if model is None or client is None:
+		return []
+	if VENDOR == "qdrant" and QdrantClient and hasattr(client, "search"):
+		vec = model.encode([query])[0].tolist()
+		try:
+			res = client.search(collection_name=_collection, query_vector=vec, limit=top_k)
+			rets = []
+			for r in res:
+				rets.append({"trace_id": r.payload.get("trace_id"), "text": r.payload.get("text"), "score": float(getattr(r, "score", 0.0))})
+			return rets
+		except Exception:
+			return []
+	elif VENDOR == "meilisearch" and meilisearch:
+		try:
+			res = client.index(_collection).search(query, {"limit": top_k})
+			hits = res.get("hits", []) if isinstance(res, dict) else getattr(res, "hits", [])
+			return [{"trace_id": h.get("trace_id"), "text": h.get("text"), "score": 0.0} for h in hits]
+		except Exception:
+			return []
+	return []

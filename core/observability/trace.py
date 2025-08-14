@@ -50,3 +50,14 @@ def get_trace_summary(trace_id: str) -> List[Dict[str, Any]]:
 			data = {"raw": payload}
 		out.append({"phase": phase, "role": role, "payload": data, "ts": created_at})
 	return out
+
+
+def list_recent_traces(limit: int = 50) -> List[Dict[str, Any]]:
+	"""Return recent traces with basic info for dashboards."""
+	c = get_conn()
+	rows = c.execute(
+		"SELECT t.id, t.thread_id, MAX(e.created_at) as last_ts FROM traces t LEFT JOIN trace_events e ON e.trace_id=t.id GROUP BY t.id, t.thread_id ORDER BY last_ts DESC LIMIT ?",
+		(limit,)
+	).fetchall()
+	c.close()
+	return [{"trace_id": r[0], "thread_id": r[1], "last_ts": r[2]} for r in rows]

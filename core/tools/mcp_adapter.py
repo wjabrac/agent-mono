@@ -3,6 +3,7 @@ from typing import Dict, Any
 from pydantic import BaseModel
 from core.tools.registry import ToolSpec, register
 from core.instrumentation import instrument_tool
+from core.trace_context import set_trace
 
 # Minimal placeholder MCP adapter with local-safe registrations.
 # Extend by actually connecting to MCP servers and mapping methods.
@@ -75,3 +76,34 @@ def _mcp_git_status(args: Dict[str, Any]) -> Dict[str, Any]:
 	return {"stdout": res.stdout}
 
 register(ToolSpec(name="mcp.git.status", input_model=GitStatusInput, run=_mcp_git_status))
+
+# Existing MCP integration left intact
+# Add delegate and kb.search microtools for convenience
+
+class DelegateInput(BaseModel):
+	prompt: str
+	thread_id: str | None = None
+	tags: list[str] = []
+	override_steps: list[dict[str, Any]] | None = None
+
+@instrument_tool("agent.delegate")
+def _delegate(args: Dict[str, Any]) -> Dict[str, Any]:
+	from core.agentControl import execute_steps
+	p = args.get("prompt", "")
+	thread = args.get("thread_id")
+	steps = args.get("override_steps")
+	return execute_steps(p, steps, thread_id=thread, tags=args.get("tags") or [])
+
+register(ToolSpec(name="agent.delegate", input_model=DelegateInput, run=_delegate))
+
+@instrument_tool("kb.search")
+def _kb_search(args: Dict[str, Any]) -> Dict[str, Any]:
+	try:
+		from core.knowledge.search import semantic_query
+	except Exception:
+		return {"results": []}
+	q = args.get("q") or args.get("query") or ""
+	k = int(args.get("k", 5) or 5)
+	return {"results": semantic_query(q, top_k=k)}
+
+register(ToolSpec(name="kb.search", input_model=None, run=_kb_search))
