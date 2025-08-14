@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
 from autoagent.registry import registry
 from autoagent import MetaChain
@@ -8,16 +7,7 @@ from autoagent.types import Agent, Response
 import importlib
 import inspect
 
-# 定义lifespan上下文管理器
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 启动时执行
-    await create_agent_endpoints(app)
-    yield
-    # 关闭时执行
-    # 清理代码（如果需要）
-
-app = FastAPI(title="MetaChain API", lifespan=lifespan)
+app = FastAPI(title="MetaChain API")
 
 class ToolRequest(BaseModel):
     args: Dict[str, Any]
