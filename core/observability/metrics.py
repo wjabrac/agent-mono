@@ -37,3 +37,4 @@ class Histogram:
 
 tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool","ok"])
 tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool"])
+tool_skipped_total = Counter("tool_skipped_total", "Tool skipped", ["tool","reason"])
