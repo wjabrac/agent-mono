@@ -5,7 +5,11 @@ from typing import List
 import importlib.util
 import duckdb
 from llama_index.core.schema import NodeRelationship, RelatedNodeInfo, TextNode
-from llama_index.core.vector_stores.types import VectorStoreQuery, FilterOperator
+from llama_index.core.vector_stores.types import (
+    VectorStoreQuery,
+    FilterOperator,
+    VectorStoreQueryMode,
+)
 from llama_index.vector_stores.duckdb import DuckDBVectorStore
 from llama_index.vector_stores.duckdb import DuckDBVectorStore
 from llama_index.core.vector_stores.types import (
@@ -125,6 +129,32 @@ def test_duckdb_from_local_and_params():
     assert isinstance(store1, DuckDBVectorStore)
     store2 = DuckDBVectorStore.from_params(embed_dim=3)
     assert isinstance(store2, DuckDBVectorStore)
+
+
+def test_schema_name(text_node_list: List[TextNode]) -> None:
+    store = DuckDBVectorStore(embed_dim=3, schema_name="alt_schema")
+    store.add(text_node_list[:1])
+    nodes = store.get_nodes(node_ids=[text_node_list[0].node_id])
+    assert len(nodes) == 1
+
+
+def test_hybrid_search(text_node_list: List[TextNode]) -> None:
+    try:
+        store = DuckDBVectorStore(embed_dim=3, hybrid_search=True)
+    except duckdb.IOException:
+        pytest.skip("fts extension not available")
+
+    store.add(text_node_list)
+    q = VectorStoreQuery(
+        query_embedding=[0.0, 0.0, 0.9],
+        query_str="progress",
+        similarity_top_k=2,
+        sparse_top_k=2,
+        mode=VectorStoreQueryMode.HYBRID,
+    )
+    res = store.query(q)
+    assert res.nodes
+    assert any(n.metadata.get("author") == "Marie Curie" for n in res.nodes)
 
 
 def memory_store():
