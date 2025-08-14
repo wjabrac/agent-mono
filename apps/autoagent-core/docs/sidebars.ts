@@ -43,6 +43,7 @@ const sidebars: SidebarsConfig = {
         "Dev-Guideline/dev-guide-architecture",
         "Dev-Guideline/dev-guide-temporal-async",
         "Dev-Guideline/dev-guide-integration-n8n-crewai",
+        "Dev-Guideline/dev-guide-project-policy",
       ],
     },
   ],
