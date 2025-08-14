@@ -1,0 +1,8 @@
+{
+  "name": "echo",
+  "version": "0.1.0",
+  "scopes_allow": ["fs.temp"],
+  "rate_limit_per_min": 2,
+  "network": "none",
+  "working_dir": "temp"
+}
