@@ -40,3 +40,14 @@ For design details see [`docs/architecture/tool-runtime-and-planning.md`](archit
 
 For development guidelines, consult [AGENTS.md](../AGENTS.md).
 
+## TypeScript example agent
+
+An experimental TypeScript agent is available under `services/ts-agent`.
+
+```bash
+cd services/ts-agent
+npm test            # type-check
+npm run build       # compile
+node dist/cli.js    # run the REPL
+```
+
