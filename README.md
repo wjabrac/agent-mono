@@ -37,15 +37,6 @@
 
 See [`docs/quickstart.md`](docs/quickstart.md) for more details.
 
-## Auxiliary tooling via Docker
-
-Run supporting services like Redis, n8n, Node-RED, a Prefect scheduler, a TensorFlow/LangChain/LlamaIndex service, Odoo, WordPress, MariaDB, and Mautic with Docker Compose:
-
-```bash
-docker compose -f docker/docker-compose.yml up -d
-```
-
-These tools are optional and help integrate external workflows and content systems.
 
 ## Tool registry, policy, HITL, and planning (experimental)
 
