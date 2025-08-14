@@ -1,4 +1,5 @@
-"""Prompts."""
+# Write the conflict-free Python module to a file for download
+content = '''"""Prompts."""
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -280,8 +281,8 @@ class ChatPromptTemplate(BasePromptTemplate):  # type: ignore[no-redef]
     def format_messages(
         self, llm: Optional[BaseLLM] = None, **kwargs: Any
     ) -> List[ChatMessage]:
-        del llm  # unused
         """Format the prompt into a list of chat messages."""
+        del llm  # unused
         all_kwargs = {
             **self.kwargs,
             **kwargs,
@@ -540,3 +541,7 @@ class LangchainPromptTemplate(BasePromptTemplate):  # type: ignore[no-redef]
 
 # NOTE: only for backwards compatibility
 Prompt = PromptTemplate
+'''
+with open('/mnt/data/prompts_fixed.py', 'w', encoding='utf-8') as f:
+    f.write(content)
+print("Saved to /mnt/data/prompts_fixed.py")
