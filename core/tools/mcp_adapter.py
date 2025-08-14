@@ -78,7 +78,7 @@ def _mcp_git_status(args: Dict[str, Any]) -> Dict[str, Any]:
 register(ToolSpec(name="mcp.git.status", input_model=GitStatusInput, run=_mcp_git_status))
 
 # Existing MCP integration left intact
-# Add delegate and kb.search microtools for convenience
+# Add delegate, messaging, search, and compute microtools for convenience
 
 class DelegateInput(BaseModel):
 	prompt: str
@@ -107,3 +107,81 @@ def _kb_search(args: Dict[str, Any]) -> Dict[str, Any]:
 	return {"results": semantic_query(q, top_k=k)}
 
 register(ToolSpec(name="kb.search", input_model=None, run=_kb_search))
+
+
+class MathEvalInput(BaseModel):
+        expr: str
+
+
+@instrument_tool("mcp.math.eval")
+def _mcp_math_eval(args: Dict[str, Any]) -> Dict[str, Any]:
+        data = MathEvalInput(**args)
+        import math
+        try:
+                result = eval(data.expr, {"__builtins__": {}}, vars(math))
+                return {"result": result}
+        except Exception as e:
+                return {"error": str(e)}
+
+
+register(ToolSpec(name="mcp.math.eval", input_model=MathEvalInput, run=_mcp_math_eval))
+
+
+class DDGSearchInput(BaseModel):
+        query: str
+        max_results: int = 5
+
+
+@instrument_tool("mcp.search.ddg")
+def _mcp_search_ddg(args: Dict[str, Any]) -> Dict[str, Any]:
+        import requests
+        data = DDGSearchInput(**args)
+        try:
+                r = requests.get(
+                        "https://duckduckgo.com/",
+                        params={"q": data.query, "format": "json", "no_redirect": 1},
+                        timeout=10,
+                )
+                r.raise_for_status()
+                js = r.json()
+                topics = js.get("RelatedTopics", []) if isinstance(js, dict) else []
+                return {"results": topics[: data.max_results]}
+        except Exception:
+                return {"results": []}
+
+
+register(ToolSpec(name="mcp.search.ddg", input_model=DDGSearchInput, run=_mcp_search_ddg))
+
+
+class MessageInput(BaseModel):
+        thread_id: str
+        sender: str
+        recipient: str
+        content: str
+
+
+@instrument_tool("agent.message")
+def _agent_message(args: Dict[str, Any]) -> Dict[str, Any]:
+        from core.memory import db
+        data = MessageInput(**args)
+        db.save_message(data.thread_id, data.sender, data.recipient, data.content)
+        return {"stored": True}
+
+
+register(ToolSpec(name="agent.message", input_model=MessageInput, run=_agent_message))
+
+
+class InboxInput(BaseModel):
+        thread_id: str
+        recipient: str
+
+
+@instrument_tool("agent.inbox")
+def _agent_inbox(args: Dict[str, Any]) -> Dict[str, Any]:
+        from core.memory import db
+        data = InboxInput(**args)
+        msgs = db.fetch_messages(data.thread_id, data.recipient)
+        return {"messages": msgs}
+
+
+register(ToolSpec(name="agent.inbox", input_model=InboxInput, run=_agent_inbox))

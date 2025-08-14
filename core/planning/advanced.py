@@ -37,6 +37,11 @@ def expand_plan(raw_steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 n = int(spec.get("range", spec.get("times", 0)) or 0)
                 for _ in range(max(0, n)):
                     _expand(item.get("steps", []))
+            elif "retry" in item and isinstance(item.get("steps"), list):
+                spec = item.get("retry") or {}
+                n = int(spec.get("max", 1) or 1)
+                for _ in range(max(0, n)):
+                    _expand(item.get("steps", []))
             else:
                 expanded.append(item)
 
