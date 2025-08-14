@@ -1,8 +1,7 @@
-from fastapi import FastAPI, Query, Response
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import os
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest, CollectorRegistry, REGISTRY
 from core.agentControl import execute_steps
 app = FastAPI(title="autoagent-core")
 class StepModel(BaseModel):
@@ -14,9 +13,6 @@ class RunModel(BaseModel):
 @app.get("/health")
 def health():
     return {"ok": True}
-@app.get("/metrics")
-def metrics():
-    return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)  # type: ignore
 @app.post("/run")
 def run_agent(req: RunModel, thread: str | None = Query(default=None), tags: List[str] | None = Query(default=None)):
     return execute_steps(req.prompt, [s.dict() for s in req.steps], thread_id=thread, tags=tags or [])

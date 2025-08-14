@@ -34,18 +34,6 @@ services:
       - SALT=devsalt
       - NEXTAUTH_URL=http://localhost:3000
 
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prom-data:/prometheus
-    ports: ["9090:9090"]
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    volumes: [ "./grafana:/var/lib/grafana" ]
-    ports: ["3001:3000"]
-
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
@@ -53,7 +41,7 @@ services:
 
   autoagent-core:
     build: ../apps/autoagent-core
-    depends_on: [n8n, qdrant, temporal, langfuse, prometheus, grafana, ollama]
+    depends_on: [n8n, qdrant, temporal, langfuse, ollama]
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_HOST=http://ollama:11434
@@ -74,7 +62,6 @@ services:
       - TEMPORAL_HOST=temporal:7233
     volumes:
       - ..:/workspace
-    ports: ["9109:9109"]
 
 volumes:
   n8n_data:
