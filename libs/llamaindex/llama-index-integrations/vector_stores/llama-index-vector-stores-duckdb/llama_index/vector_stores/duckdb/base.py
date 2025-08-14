@@ -34,6 +34,7 @@ from llama_index.core.vector_stores.types import (
     FilterOperator,
     VectorStoreQuery,
     VectorStoreQueryResult,
+    VectorStoreQueryMode,
     FilterCondition,
 )
 from llama_index.core.vector_stores.utils import (
@@ -114,9 +115,9 @@ class DuckDBVectorStore(BasePydanticVectorStore):
 
     database_name: str
     table_name: str
-    # schema_name: Optional[str] # TODO: support schema name
+    schema_name: str
     embed_dim: Optional[int]
-    # hybrid_search: Optional[bool] # TODO: support hybrid search
+    hybrid_search: bool
     text_search_config: Optional[dict]
     persist_dir: str
 
@@ -130,9 +131,11 @@ class DuckDBVectorStore(BasePydanticVectorStore):
         self,
         database_name: str = ":memory:",
         table_name: str = "documents",
+        schema_name: str = "main",
         embed_dim: Optional[int] = None,
         # https://duckdb.org/docs/extensions/full_text_search
         text_search_config: Optional[dict] = None,
+        hybrid_search: bool = False,
         persist_dir: str = "./storage",
         client: Optional[duckdb.DuckDBPyConnection] = None,
         **kwargs: Any,  # noqa: ARG002
@@ -145,6 +148,8 @@ class DuckDBVectorStore(BasePydanticVectorStore):
             "database_name": database_name,
             "table_name": table_name,
             "embed_dim": embed_dim,
+            "schema_name": schema_name,
+            "hybrid_search": hybrid_search,
             "text_search_config": text_search_config,
             "persist_dir": persist_dir,
         }
@@ -154,16 +159,23 @@ class DuckDBVectorStore(BasePydanticVectorStore):
 
         super().__init__(stores_text=True, **fields)
 
-        _ = self._initialize_table(self.client, self.table_name, self.embed_dim)
+        _ = self._initialize_table(
+            self.client,
+            self.schema_name,
+            self.table_name,
+            self.embed_dim,
+            self.hybrid_search,
+            self.text_search_config,
+        )
 
     @classmethod
     def from_local(
         cls,
         database_path: str,
         table_name: str = "documents",
-        # schema_name: Optional[str] = "main",
+        schema_name: str = "main",
         embed_dim: Optional[int] = None,
-        # hybrid_search: Optional[bool] = False,
+        hybrid_search: bool = False,
         text_search_config: Optional[dict] = None,
         **kwargs: Any,
     ) -> "DuckDBVectorStore":
@@ -173,7 +185,9 @@ class DuckDBVectorStore(BasePydanticVectorStore):
         return cls(
             database_name=db_path.name,
             table_name=table_name,
+            schema_name=schema_name,
             embed_dim=embed_dim,
+            hybrid_search=hybrid_search,
             text_search_config=text_search_config,
             persist_dir=str(db_path.parent),
             **kwargs,
@@ -184,9 +198,9 @@ class DuckDBVectorStore(BasePydanticVectorStore):
         cls,
         database_name: str = ":memory:",
         table_name: str = "documents",
-        # schema_name: Optional[str] = "main",
+        schema_name: str = "main",
         embed_dim: Optional[int] = None,
-        # hybrid_search: Optional[bool] = False,
+        hybrid_search: bool = False,
         text_search_config: Optional[dict] = None,
         persist_dir: str = "./storage",
         **kwargs: Any,
@@ -194,9 +208,9 @@ class DuckDBVectorStore(BasePydanticVectorStore):
         return cls(
             database_name=database_name,
             table_name=table_name,
-            # schema_name=schema_name,
+            schema_name=schema_name,
             embed_dim=embed_dim,
-            # hybrid_search=hybrid_search,
+            hybrid_search=hybrid_search,
             text_search_config=text_search_config,
             persist_dir=persist_dir,
             **kwargs,
@@ -237,7 +251,7 @@ class DuckDBVectorStore(BasePydanticVectorStore):
     @property
     def table(self) -> duckdb.DuckDBPyRelation:
         """Return the table for the connection to the DuckDB database."""
-        return self.client.table(self.table_name)
+        return self.client.table(f"{self.schema_name}.{self.table_name}")
 
     @classmethod
     def _get_embedding_type(cls, embed_dim: Optional[int]) -> str:
@@ -245,20 +259,31 @@ class DuckDBVectorStore(BasePydanticVectorStore):
 
     @classmethod
     def _initialize_table(
-        cls, conn: duckdb.DuckDBPyConnection, table_name: str, embed_dim: Optional[int]
+        cls,
+        conn: duckdb.DuckDBPyConnection,
+        schema_name: str,
+        table_name: str,
+        embed_dim: Optional[int],
+        hybrid_search: bool,
+        text_search_config: dict,
     ) -> None:
         """Initialize the DuckDB Database, extensions, and documents table."""
         home_dir = Path.home()
         conn.execute(f"SET home_directory='{home_dir}';")
         conn.install_extension("json")
         conn.load_extension("json")
-        conn.install_extension("fts")
-        conn.load_extension("fts")
+        if hybrid_search:
+            conn.install_extension("fts")
+            conn.load_extension("fts")
 
         embedding_type = cls._get_embedding_type(embed_dim)
 
+        table_ref = f"{schema_name}.{table_name}"
+
+        conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
+
         conn.begin().execute(f"""
-            CREATE TABLE IF NOT EXISTS {table_name}  (
+            CREATE TABLE IF NOT EXISTS {table_ref}  (
                 node_id VARCHAR PRIMARY KEY,
                 text TEXT,
                 embedding {embedding_type},
@@ -266,7 +291,15 @@ class DuckDBVectorStore(BasePydanticVectorStore):
             );
         """).commit()
 
-        table = conn.table(table_name)
+        if hybrid_search:
+            fts_params = ", ".join(
+                f"{k}={json.dumps(v)}" for k, v in text_search_config.items()
+            )
+            conn.execute(
+                f"PRAGMA create_fts_index('{table_ref}', 'text', {fts_params});"
+            )
+
+        table = conn.table(table_ref)
 
         required_columns = ["node_id", "text", "embedding", "metadata_"]
         table_columns = table.describe().columns
@@ -308,11 +341,14 @@ class DuckDBVectorStore(BasePydanticVectorStore):
 
         return VectorStoreQueryResult(nodes=nodes, similarities=similarities, ids=ids)
 
-    @override
-    def query(self, query: VectorStoreQuery, **kwargs: Any) -> VectorStoreQueryResult:  # noqa: ARG002
-        """Query the vector store for top k most similar nodes."""
+    def _dense_query_with_score(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+        filters: Optional[MetadataFilters],
+    ) -> list[dict]:
         filter_expression = self._build_metadata_filter_expressions(
-            metadata_filters=query.filters
+            metadata_filters=filters
         )
 
         inner_query = self.table.select(
@@ -322,7 +358,7 @@ class DuckDBVectorStore(BasePydanticVectorStore):
                 if self.embed_dim is not None
                 else "list_cosine_similarity",
                 ColumnExpression("embedding"),
-                ConstantExpression(query.query_embedding).cast(
+                ConstantExpression(query_embedding).cast(
                     self._get_embedding_type(self.embed_dim)
                 ),
             ).alias("score"),
@@ -336,20 +372,78 @@ class DuckDBVectorStore(BasePydanticVectorStore):
                 ColumnExpression("metadata_"),
                 ColumnExpression("score"),
             )
-            .filter(
-                ColumnExpression("score").isnotnull(),
-            )
-            .sort(
-                ColumnExpression("score").desc(),
-            )
-            .limit(
-                query.similarity_top_k,
-            )
+            .filter(ColumnExpression("score").isnotnull())
+            .sort(ColumnExpression("score").desc())
+            .limit(top_k)
         )
 
         command = outer_query.sql_query()
+        return self.client.execute(command).arrow().to_pylist()
 
-        rows = self.client.execute(command).arrow().to_pylist()
+    def _text_query_with_rank(
+        self,
+        query_str: str,
+        top_k: int,
+        filters: Optional[MetadataFilters],
+    ) -> list[dict]:
+        filter_expression = self._build_metadata_filter_expressions(
+            metadata_filters=filters
+        )
+
+        escaped_query = query_str.replace("'", "''")
+        fts_schema = f"fts_{self.schema_name}"
+        fts_func = f"{fts_schema}.{self.table_name}.match_bm25('{escaped_query}')"
+
+        inner_query = self.table.filter(filter_expression).filter(fts_func)
+        outer_query = (
+            inner_query.select(
+                "node_id",
+                "text",
+                "embedding",
+                "metadata_",
+                f"{fts_func} AS score",
+            )
+            .sort("score DESC")
+            .limit(top_k)
+        )
+
+        command = outer_query.sql_query()
+        return self.client.execute(command).arrow().to_pylist()
+
+    def _hybrid_query(self, query: VectorStoreQuery) -> list[dict]:
+        if query.alpha is not None:
+            logger.warning("duckdb hybrid search does not support alpha parameter.")
+
+        sparse_top_k = query.sparse_top_k or query.similarity_top_k
+
+        dense_rows = self._dense_query_with_score(
+            query.query_embedding, query.similarity_top_k, query.filters
+        )
+        sparse_rows = self._text_query_with_rank(
+            query.query_str, sparse_top_k, query.filters
+        )
+
+        return _dedup_rows(dense_rows + sparse_rows)
+
+    @override
+    def query(self, query: VectorStoreQuery, **kwargs: Any) -> VectorStoreQueryResult:  # noqa: ARG002
+        """Query the vector store."""
+        if query.mode == VectorStoreQueryMode.HYBRID:
+            rows = self._hybrid_query(query)
+        elif query.mode in [
+            VectorStoreQueryMode.SPARSE,
+            VectorStoreQueryMode.TEXT_SEARCH,
+        ]:
+            sparse_top_k = query.sparse_top_k or query.similarity_top_k
+            rows = self._text_query_with_rank(
+                query.query_str, sparse_top_k, query.filters
+            )
+        elif query.mode == VectorStoreQueryMode.DEFAULT:
+            rows = self._dense_query_with_score(
+                query.query_embedding, query.similarity_top_k, query.filters
+            )
+        else:
+            raise ValueError(f"Invalid query mode: {query.mode}")
 
         return self._arrow_row_to_query_result(rows)
 
@@ -671,3 +765,13 @@ class DuckDBVectorStore(BasePydanticVectorStore):
             final_expression = final_expression.__invert__()
 
         return final_expression
+
+
+def _dedup_rows(rows: list[dict]) -> list[dict]:
+    seen_ids = set()
+    deduped = []
+    for row in rows:
+        if row["node_id"] not in seen_ids:
+            deduped.append(row)
+            seen_ids.add(row["node_id"])
+    return deduped

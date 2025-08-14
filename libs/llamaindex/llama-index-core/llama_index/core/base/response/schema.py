@@ -1,128 +1,116 @@
+# libs/llamaindex/llama-index-core/llama_index/core/base/response/schema.py
+
 """Response schema."""
 
+from __future__ import annotations
+
 import asyncio
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Sequence,
+    Callable,
+    Awaitable,
+    Generator,
+    AsyncGenerator,
+)
 
 from llama_index.core.async_utils import asyncio_run
-from llama_index.core.bridge.pydantic import BaseModel
+from llama_index.core.bridge.pydantic import BaseModel, Field, ValidationError
 from llama_index.core.schema import NodeWithScore
-from llama_index.core.types import TokenGen, TokenAsyncGen
+from llama_index.core.types import (
+    TokenGen,
+    TokenAsyncGen,
+    RESPONSE_TEXT_TYPE,
+    BasePydanticProgram,
+)
 from llama_index.core.utils import truncate_text
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core.prompts.base import BasePromptTemplate
+    from llama_index.core.indices.prompt_helper import PromptHelper
+    from llama_index.core.llms import LLM
+
+logger = logging.getLogger(__name__)
+
+
+class StructuredRefineResponse(BaseModel):
+    """Response schema used for structured refining."""
+    answer: str = Field(
+        description="The answer for the given query, based on the context and not prior knowledge."
+    )
+    query_satisfied: bool = Field(
+        description="True if there was enough context given to provide an answer that satisfies the query."
+    )
 
 
 @dataclass
 class Response:
-    """
-    Response object.
-
-    Returned if streaming=False.
-
-    Attributes:
-        response: The response text.
-
-    """
-
+    """Response object. Returned if streaming=False."""
     response: Optional[str]
     source_nodes: List[NodeWithScore] = field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
 
     def __str__(self) -> str:
-        """Convert to string representation."""
         return self.response or "None"
 
     def get_formatted_sources(self, length: int = 100) -> str:
-        """Get formatted sources text."""
         texts = []
         for source_node in self.source_nodes:
             fmt_text_chunk = truncate_text(source_node.node.get_content(), length)
-            doc_id = source_node.node.node_id or "None"
-            source_text = f"> Source (Doc id: {doc_id}): {fmt_text_chunk}"
+            node_id = source_node.node.node_id or "None"
+            source_text = f"> Source (Node id: {node_id}): {fmt_text_chunk}"
             texts.append(source_text)
         return "\n\n".join(texts)
 
 
 @dataclass
 class PydanticResponse:
-    """
-    PydanticResponse object.
-
-    Returned if streaming=False.
-
-    Attributes:
-        response: The response text.
-
-    """
-
+    """PydanticResponse object. Returned if streaming=False."""
     response: Optional[BaseModel]
     source_nodes: List[NodeWithScore] = field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
 
     def __str__(self) -> str:
-        """Convert to string representation."""
         return self.response.model_dump_json() if self.response else "None"
 
     def __getattr__(self, name: str) -> Any:
-        """Get attribute, but prioritize the pydantic  response object."""
         if self.response is not None and name in self.response.model_dump():
             return getattr(self.response, name)
-        else:
-            return None
+        return None
 
     def __post_init_post_parse__(self) -> None:
-        """
-        This method is required.
-
-        According to the Pydantic docs, if a stdlib dataclass (which this class
-        is one) gets mixed with a BaseModel (in the sense that this gets used as a
-        Field in another BaseModel), then this stdlib dataclass will automatically
-        get converted to a pydantic.v1.dataclass.
-
-        However, it appears that in that automatic conversion, this method
-        is left as NoneType, which raises an error. To safeguard against that,
-        we are explicitly defining this method as something that can be called.
-
-        Sources:
-            - https://docs.pydantic.dev/1.10/usage/dataclasses/#use-of-stdlib-dataclasses-with-basemodel
-            - https://docs.pydantic.dev/1.10/usage/dataclasses/#initialize-hooks
-        """
         return
 
     def get_formatted_sources(self, length: int = 100) -> str:
-        """Get formatted sources text."""
         texts = []
         for source_node in self.source_nodes:
             fmt_text_chunk = truncate_text(source_node.node.get_content(), length)
-            doc_id = source_node.node.node_id or "None"
-            source_text = f"> Source (Doc id: {doc_id}): {fmt_text_chunk}"
+            node_id = source_node.node.node_id or "None"
+            source_text = f"> Source (Node id: {node_id}): {fmt_text_chunk}"
             texts.append(source_text)
         return "\n\n".join(texts)
 
     def get_response(self) -> Response:
-        """Get a standard response object."""
         response_txt = self.response.model_dump_json() if self.response else "None"
         return Response(response_txt, self.source_nodes, self.metadata)
 
 
 @dataclass
 class StreamingResponse:
-    """
-    StreamingResponse object.
-
-    Returned if streaming=True.
-
-    Attributes:
-        response_gen: The response generator.
-
-    """
-
+    """StreamingResponse object. Returned if streaming=True."""
     response_gen: TokenGen
     source_nodes: List[NodeWithScore] = field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
     response_txt: Optional[str] = None
 
     def __str__(self) -> str:
-        """Convert to string representation."""
         if self.response_txt is None and self.response_gen is not None:
             response_txt = ""
             for text in self.response_gen:
@@ -131,7 +119,6 @@ class StreamingResponse:
         return self.response_txt or "None"
 
     def get_response(self) -> Response:
-        """Get a standard response object."""
         if self.response_txt is None and self.response_gen is not None:
             response_txt = ""
             for text in self.response_gen:
@@ -140,7 +127,6 @@ class StreamingResponse:
         return Response(self.response_txt, self.source_nodes, self.metadata)
 
     def print_response_stream(self) -> None:
-        """Print the response stream."""
         if self.response_txt is None and self.response_gen is not None:
             response_txt = ""
             for text in self.response_gen:
@@ -150,8 +136,7 @@ class StreamingResponse:
         else:
             print(self.response_txt)
 
-    def get_formatted_sources(self, length: int = 100, trim_text: int = True) -> str:
-        """Get formatted sources text."""
+    def get_formatted_sources(self, length: int = 100, trim_text: bool = True) -> str:
         texts = []
         for source_node in self.source_nodes:
             fmt_text_chunk = source_node.node.get_content()
@@ -165,16 +150,7 @@ class StreamingResponse:
 
 @dataclass
 class AsyncStreamingResponse:
-    """
-    AsyncStreamingResponse object.
-
-    Returned if streaming=True while using async.
-
-    Attributes:
-        _async_response_gen: The response async generator.
-
-    """
-
+    """AsyncStreamingResponse object. Returned if streaming=True while using async."""
     response_gen: TokenAsyncGen
     source_nodes: List[NodeWithScore] = field(default_factory=list)
     metadata: Optional[Dict[str, Any]] = None
@@ -184,17 +160,14 @@ class AsyncStreamingResponse:
         self._lock = asyncio.Lock()
 
     def __str__(self) -> str:
-        """Convert to string representation."""
         return asyncio_run(self._async_str())
 
     async def _async_str(self) -> str:
-        """Convert to string representation."""
         async for _ in self._yield_response():
             ...
         return self.response_txt or "None"
 
     async def _yield_response(self) -> TokenAsyncGen:
-        """Yield the string response."""
         async with self._lock:
             if self.response_txt is None and self.response_gen is not None:
                 self.response_txt = ""
@@ -205,26 +178,20 @@ class AsyncStreamingResponse:
                 yield self.response_txt
 
     async def async_response_gen(self) -> TokenAsyncGen:
-        """Yield the string response."""
         async for text in self._yield_response():
             yield text
 
     async def get_response(self) -> Response:
-        """Get a standard response object."""
         async for _ in self._yield_response():
             ...
         return Response(self.response_txt, self.source_nodes, self.metadata)
 
     async def print_response_stream(self) -> None:
-        """Print the response stream."""
-        streaming = True
         async for text in self._yield_response():
             print(text, end="", flush=True)
-        # do an empty print to print on the next line again next time
         print()
 
-    def get_formatted_sources(self, length: int = 100, trim_text: int = True) -> str:
-        """Get formatted sources text."""
+    def get_formatted_sources(self, length: int = 100, trim_text: bool = True) -> str:
         texts = []
         for source_node in self.source_nodes:
             fmt_text_chunk = source_node.node.get_content()
@@ -236,6 +203,239 @@ class AsyncStreamingResponse:
         return "\n\n".join(texts)
 
 
+async def _refinement_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Shared refinement loop used by Refine synthesizers."""
+    from llama_index.core.response.utils import get_response_text, aget_response_text
+
+    if isinstance(response, Generator):
+        response = get_response_text(response)
+    if isinstance(response, AsyncGenerator):
+        response = await aget_response_text(response)
+
+    fmt_text_chunk = truncate_text(text_chunk, 50)
+    logger.debug(f"> Refine context: {fmt_text_chunk}")
+    if verbose:
+        print(f"> Refine context: {fmt_text_chunk}")
+
+    refine_template = base_refine_template.partial_format(
+        query_str=query_str, existing_answer=response
+    )
+
+    avail_chunk_size = prompt_helper._get_available_chunk_size(refine_template)
+    if avail_chunk_size < 0:
+        return response
+
+    text_chunks = prompt_helper.repack(
+        refine_template, text_chunks=[text_chunk], llm=llm
+    )
+
+    program = program_factory(refine_template)
+    for cur_text_chunk in text_chunks:
+        query_satisfied = False
+        if not streaming:
+            try:
+                structured_response = await program.acall(
+                    context_msg=cur_text_chunk, **response_kwargs
+                )
+                query_satisfied = getattr(structured_response, "query_satisfied", False)
+                if query_satisfied:
+                    response = getattr(structured_response, "answer", response)
+            except ValidationError as e:
+                logger.warning(
+                    f"Validation error on structured response: {e}", exc_info=True
+                )
+        else:
+            if isinstance(response, Generator):
+                from llama_index.core.response.utils import get_response_text as _grt
+                response = _grt(response)
+            if isinstance(response, AsyncGenerator):
+                from llama_index.core.response.utils import aget_response_text as _gart
+                response = await _gart(response)
+            refine_template = base_refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+            response = await stream_fn(
+                refine_template, cur_text_chunk, **response_kwargs
+            )
+        if query_satisfied:
+            refine_template = base_refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+    return response
+
+
+def refine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Synchronous wrapper for _refinement_loop."""
+    return asyncio_run(
+        _refinement_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=base_refine_template,
+            prompt_helper=prompt_helper,
+            llm=llm,
+            streaming=streaming,
+            verbose=verbose,
+            response_kwargs=response_kwargs,
+        )
+    )
+
+
+async def arefine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Async wrapper for _refinement_loop."""
+    return await _refinement_loop(
+        response,
+        query_str,
+        text_chunk,
+        program_factory=program_factory,
+        stream_fn=stream_fn,
+        base_refine_template=base_refine_template,
+        prompt_helper=prompt_helper,
+        llm=llm,
+        streaming=streaming,
+        verbose=verbose,
+        response_kwargs=response_kwargs,
+    )
+
+
 RESPONSE_TYPE = Union[
     Response, StreamingResponse, AsyncStreamingResponse, PydanticResponse
 ]
+
+
+async def refinement_loop(
+    program_factory: Callable[["BasePromptTemplate"], "BasePydanticProgram"],
+    llm: "LLM",
+    prompt_helper: "PromptHelper",
+    refine_template: "BasePromptTemplate",
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    streaming: bool,
+    verbose: bool,
+    is_async: bool,
+    **response_kwargs: Any,
+) -> Optional[RESPONSE_TEXT_TYPE]:
+    """Alternative single-function refine loop retained for backward compatibility."""
+    from llama_index.core.response.utils import get_response_text, aget_response_text
+
+    if isinstance(response, Generator):
+        response = get_response_text(response)
+    if isinstance(response, AsyncGenerator):
+        response = await aget_response_text(response)
+
+    fmt_text_chunk = truncate_text(text_chunk, 50)
+    logger.debug(f"> Refine context: {fmt_text_chunk}")
+    if verbose:
+        print(f"> Refine context: {fmt_text_chunk}")
+
+    refine_template = refine_template.partial_format(
+        query_str=query_str, existing_answer=response
+    )
+
+    avail_chunk_size = prompt_helper._get_available_chunk_size(refine_template)
+    if avail_chunk_size < 0:
+        return response
+
+    text_chunks = prompt_helper.repack(
+        refine_template, text_chunks=[text_chunk], llm=llm
+    )
+
+    program = program_factory(refine_template)
+
+    if is_async:
+        async def call_program(context_msg: str) -> StructuredRefineResponse:
+            return await program.acall(context_msg=context_msg, **response_kwargs)
+
+        async def stream_response(
+            template: BasePromptTemplate, context_msg: str
+        ) -> RESPONSE_TEXT_TYPE:
+            return await llm.astream(
+                template, context_msg=context_msg, **response_kwargs
+            )
+    else:
+        def call_program_sync(context_msg: str) -> StructuredRefineResponse:
+            return program(context_msg=context_msg, **response_kwargs)
+
+        async def call_program(context_msg: str) -> StructuredRefineResponse:
+            # run sync call in the same thread
+            return call_program_sync(context_msg)
+
+        def stream_response_sync(
+            template: BasePromptTemplate, context_msg: str
+        ) -> RESPONSE_TEXT_TYPE:
+            return llm.stream(template, context_msg=context_msg, **response_kwargs)
+
+        async def stream_response(
+            template: BasePromptTemplate, context_msg: str
+        ) -> RESPONSE_TEXT_TYPE:
+            return stream_response_sync(template, context_msg)
+
+    for cur_text_chunk in text_chunks:
+        query_satisfied = False
+        if not streaming:
+            try:
+                structured_response = await call_program(cur_text_chunk)
+                query_satisfied = getattr(structured_response, "query_satisfied", False)
+                if query_satisfied:
+                    response = getattr(structured_response, "answer", response)
+            except ValidationError as e:
+                logger.warning(
+                    f"Validation error on structured response: {e}", exc_info=True
+                )
+        else:
+            if isinstance(response, Generator):
+                from llama_index.core.response.utils import get_response_text as _grt
+                response = _grt(response)
+            if isinstance(response, AsyncGenerator):
+                tmp = ""
+                async for text in response:
+                    tmp += text
+                response = tmp
+            refine_template = refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+            response = await stream_response(refine_template, cur_text_chunk)
+
+    return response

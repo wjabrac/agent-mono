@@ -10,10 +10,9 @@ from typing import (
     AsyncGenerator,
 )
 
-from llama_index.core.bridge.pydantic import BaseModel, Field, ValidationError
+from llama_index.core.bridge.pydantic import BaseModel, ValidationError
 from llama_index.core.callbacks.base import CallbackManager
 from llama_index.core.indices.prompt_helper import PromptHelper
-from llama_index.core.indices.utils import truncate_text
 from llama_index.core.llms import LLM
 from llama_index.core.prompts.base import BasePromptTemplate
 from llama_index.core.prompts.default_prompt_selectors import (
@@ -21,35 +20,21 @@ from llama_index.core.prompts.default_prompt_selectors import (
     DEFAULT_TEXT_QA_PROMPT_SEL,
 )
 from llama_index.core.prompts.mixin import PromptDictType
-from llama_index.core.response.utils import get_response_text, aget_response_text
 from llama_index.core.response_synthesizers.base import BaseSynthesizer
 from llama_index.core.types import RESPONSE_TEXT_TYPE, BasePydanticProgram
 from llama_index.core.instrumentation.events.synthesis import (
     GetResponseEndEvent,
     GetResponseStartEvent,
 )
+from llama_index.core.base.response.schema import (
+    StructuredRefineResponse,
+    refine_program_loop,
+    arefine_program_loop,
+)
 import llama_index.core.instrumentation as instrument
 
 dispatcher = instrument.get_dispatcher(__name__)
-
 logger = logging.getLogger(__name__)
-
-
-class StructuredRefineResponse(BaseModel):
-    """
-    Used to answer a given query based on the provided context.
-
-    Also indicates if the query was satisfied with the provided answer.
-    """
-
-    answer: str = Field(
-        description="The answer for the given query, based on the context and not "
-        "prior knowledge."
-    )
-    query_satisfied: bool = Field(
-        description="True if there was enough context given to provide an answer "
-        "that satisfies the query."
-    )
 
 
 class DefaultRefineProgram(BasePydanticProgram):
@@ -82,10 +67,7 @@ class DefaultRefineProgram(BasePydanticProgram):
             if isinstance(answer, BaseModel):
                 answer = answer.model_dump_json()
         else:
-            answer = self._llm.predict(
-                self._prompt,
-                **kwds,
-            )
+            answer = self._llm.predict(self._prompt, **kwds)
         return StructuredRefineResponse(answer=answer, query_satisfied=True)
 
     async def acall(self, *args: Any, **kwds: Any) -> StructuredRefineResponse:
@@ -98,10 +80,7 @@ class DefaultRefineProgram(BasePydanticProgram):
             if isinstance(answer, BaseModel):
                 answer = answer.model_dump_json()
         else:
-            answer = await self._llm.apredict(
-                self._prompt,
-                **kwds,
-            )
+            answer = await self._llm.apredict(self._prompt, **kwds)
         return StructuredRefineResponse(answer=answer, query_satisfied=True)
 
 
@@ -136,9 +115,7 @@ class Refine(BaseSynthesizer):
         self._output_cls = output_cls
 
         if self._streaming and self._structured_answer_filtering:
-            raise ValueError(
-                "Streaming not supported with structured answer filtering."
-            )
+            raise ValueError("Streaming not supported with structured answer filtering.")
         if not self._structured_answer_filtering and program_factory is not None:
             raise ValueError(
                 "Program factory not supported without structured answer filtering."
@@ -146,14 +123,12 @@ class Refine(BaseSynthesizer):
         self._program_factory = program_factory or self._default_program_factory
 
     def _get_prompts(self) -> PromptDictType:
-        """Get prompts."""
         return {
             "text_qa_template": self._text_qa_template,
             "refine_template": self._refine_template,
         }
 
     def _update_prompts(self, prompts: PromptDictType) -> None:
-        """Update prompts."""
         if "text_qa_template" in prompts:
             self._text_qa_template = prompts["text_qa_template"]
         if "refine_template" in prompts:
@@ -167,20 +142,16 @@ class Refine(BaseSynthesizer):
         prev_response: Optional[RESPONSE_TEXT_TYPE] = None,
         **response_kwargs: Any,
     ) -> RESPONSE_TEXT_TYPE:
-        """Give response over chunks."""
         dispatcher.event(
             GetResponseStartEvent(query_str=query_str, text_chunks=text_chunks)
         )
         response: Optional[RESPONSE_TEXT_TYPE] = None
         for text_chunk in text_chunks:
             if prev_response is None:
-                # if this is the first chunk, and text chunk already
-                # is an answer, then return it
                 response = self._give_response_single(
                     query_str, text_chunk, **response_kwargs
                 )
             else:
-                # refine response if possible
                 response = self._refine_response_single(
                     prev_response, query_str, text_chunk, **response_kwargs
                 )
@@ -223,7 +194,6 @@ class Refine(BaseSynthesizer):
         text_chunk: str,
         **response_kwargs: Any,
     ) -> RESPONSE_TEXT_TYPE:
-        """Give response given a query and a corresponding text chunk."""
         text_qa_template = self._text_qa_template.partial_format(query_str=query_str)
         text_chunks = self._prompt_helper.repack(
             text_qa_template, [text_chunk], llm=self._llm
@@ -231,7 +201,6 @@ class Refine(BaseSynthesizer):
 
         response: Optional[RESPONSE_TEXT_TYPE] = None
         program = self._program_factory(text_qa_template)
-        # TODO: consolidate with loop in get_response_default
         for cur_text_chunk in text_chunks:
             query_satisfied = False
             if response is None and not self._streaming:
@@ -279,73 +248,25 @@ class Refine(BaseSynthesizer):
         text_chunk: str,
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
-        """Refine response."""
-        # TODO: consolidate with logic in response/schema.py
-        if isinstance(response, Generator):
-            response = get_response_text(response)
+        # centralize via helper; wrapper handles sync/async bridging
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return self._llm.stream(template, context_msg=chunk, **kwargs)
 
-        fmt_text_chunk = truncate_text(text_chunk, 50)
-        logger.debug(f"> Refine context: {fmt_text_chunk}")
-        if self._verbose:
-            print(f"> Refine context: {fmt_text_chunk}")
-
-        # NOTE: partial format refine template with query_str and existing_answer here
-        refine_template = self._refine_template.partial_format(
-            query_str=query_str, existing_answer=response
+        return refine_program_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
-
-        # compute available chunk size to see if there is any available space
-        # determine if the refine template is too big (which can happen if
-        # prompt template + query + existing answer is too large)
-        avail_chunk_size = self._prompt_helper._get_available_chunk_size(
-            refine_template
-        )
-
-        if avail_chunk_size < 0:
-            # if the available chunk size is negative, then the refine template
-            # is too big and we just return the original response
-            return response
-
-        # obtain text chunks to add to the refine template
-        text_chunks = self._prompt_helper.repack(
-            refine_template, text_chunks=[text_chunk], llm=self._llm
-        )
-
-        program = self._program_factory(refine_template)
-        for cur_text_chunk in text_chunks:
-            query_satisfied = False
-            if not self._streaming:
-                try:
-                    structured_response = cast(
-                        StructuredRefineResponse,
-                        program(
-                            context_msg=cur_text_chunk,
-                            **response_kwargs,
-                        ),
-                    )
-                    query_satisfied = structured_response.query_satisfied
-                    if query_satisfied:
-                        response = structured_response.answer
-                except ValidationError as e:
-                    logger.warning(
-                        f"Validation error on structured response: {e}", exc_info=True
-                    )
-            else:
-                # TODO: structured response not supported for streaming
-                if isinstance(response, Generator):
-                    response = "".join(response)
-
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-                response = self._llm.stream(
-                    refine_template,
-                    context_msg=cur_text_chunk,
-                    **response_kwargs,
-                )
-
-        return response
 
     @dispatcher.span
     async def aget_response(
@@ -361,8 +282,6 @@ class Refine(BaseSynthesizer):
         response: Optional[RESPONSE_TEXT_TYPE] = None
         for text_chunk in text_chunks:
             if prev_response is None:
-                # if this is the first chunk, and text chunk already
-                # is an answer, then return it
                 response = await self._agive_response_single(
                     query_str, text_chunk, **response_kwargs
                 )
@@ -390,81 +309,24 @@ class Refine(BaseSynthesizer):
         text_chunk: str,
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
-        """Refine response."""
-        # TODO: consolidate with logic in response/schema.py
-        if isinstance(response, AsyncGenerator):
-            response = await aget_response_text(response)
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return await self._llm.astream(template, context_msg=chunk, **kwargs)
 
-        fmt_text_chunk = truncate_text(text_chunk, 50)
-        logger.debug(f"> Refine context: {fmt_text_chunk}")
-
-        # NOTE: partial format refine template with query_str and existing_answer here
-        refine_template = self._refine_template.partial_format(
-            query_str=query_str, existing_answer=response
+        return await arefine_program_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
-
-        # compute available chunk size to see if there is any available space
-        # determine if the refine template is too big (which can happen if
-        # prompt template + query + existing answer is too large)
-        avail_chunk_size = self._prompt_helper._get_available_chunk_size(
-            refine_template
-        )
-
-        if avail_chunk_size < 0:
-            # if the available chunk size is negative, then the refine template
-            # is too big and we just return the original response
-            return response
-
-        # obtain text chunks to add to the refine template
-        text_chunks = self._prompt_helper.repack(
-            refine_template, text_chunks=[text_chunk], llm=self._llm
-        )
-
-        program = self._program_factory(refine_template)
-        for cur_text_chunk in text_chunks:
-            query_satisfied = False
-            if not self._streaming:
-                try:
-                    structured_response = await program.acall(
-                        context_msg=cur_text_chunk,
-                        **response_kwargs,
-                    )
-                    structured_response = cast(
-                        StructuredRefineResponse, structured_response
-                    )
-                    query_satisfied = structured_response.query_satisfied
-                    if query_satisfied:
-                        response = structured_response.answer
-                except ValidationError as e:
-                    logger.warning(
-                        f"Validation error on structured response: {e}", exc_info=True
-                    )
-            else:
-                if isinstance(response, Generator):
-                    response = "".join(response)
-
-                if isinstance(response, AsyncGenerator):
-                    _r = ""
-                    async for text in response:
-                        _r += text
-                    response = _r
-
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-                response = await self._llm.astream(
-                    refine_template,
-                    context_msg=cur_text_chunk,
-                    **response_kwargs,
-                )
-
-            if query_satisfied:
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-        return response
 
     async def _agive_response_single(
         self,
@@ -472,7 +334,6 @@ class Refine(BaseSynthesizer):
         text_chunk: str,
         **response_kwargs: Any,
     ) -> RESPONSE_TEXT_TYPE:
-        """Give response given a query and a corresponding text chunk."""
         text_qa_template = self._text_qa_template.partial_format(query_str=query_str)
         text_chunks = self._prompt_helper.repack(
             text_qa_template, [text_chunk], llm=self._llm
@@ -480,7 +341,6 @@ class Refine(BaseSynthesizer):
 
         response: Optional[RESPONSE_TEXT_TYPE] = None
         program = self._program_factory(text_qa_template)
-        # TODO: consolidate with loop in get_response_default
         for cur_text_chunk in text_chunks:
             if response is None and not self._streaming:
                 try:
