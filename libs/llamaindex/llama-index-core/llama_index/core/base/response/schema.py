@@ -13,6 +13,7 @@ from typing import (
     Callable,
     Generator,
     AsyncGenerator,
+    Awaitable,
     cast,
 )
 
@@ -367,3 +368,73 @@ async def refinement_loop(
             response = await stream_response(refine_template, cur_text_chunk)
 
     return response
+
+
+def refine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[["BasePromptTemplate"], "BasePydanticProgram"],
+    stream_fn: Callable[["BasePromptTemplate", str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: "BasePromptTemplate",
+    prompt_helper: "PromptHelper",
+    llm: "LLM",
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> Optional[RESPONSE_TEXT_TYPE]:
+    """Synchronous wrapper for ``refinement_loop``.
+
+    ``stream_fn`` is accepted for API compatibility but is not used directly.
+    """
+
+    return asyncio_run(
+        refinement_loop(
+            program_factory,
+            llm,
+            prompt_helper,
+            base_refine_template,
+            response,
+            query_str,
+            text_chunk,
+            streaming,
+            verbose,
+            False,
+            **response_kwargs,
+        )
+    )
+
+
+async def arefine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[["BasePromptTemplate"], "BasePydanticProgram"],
+    stream_fn: Callable[["BasePromptTemplate", str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: "BasePromptTemplate",
+    prompt_helper: "PromptHelper",
+    llm: "LLM",
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> Optional[RESPONSE_TEXT_TYPE]:
+    """Async wrapper for ``refinement_loop``.
+
+    ``stream_fn`` is accepted for API compatibility but is not used directly.
+    """
+
+    return await refinement_loop(
+        program_factory,
+        llm,
+        prompt_helper,
+        base_refine_template,
+        response,
+        query_str,
+        text_chunk,
+        streaming,
+        verbose,
+        True,
+        **response_kwargs,
+    )

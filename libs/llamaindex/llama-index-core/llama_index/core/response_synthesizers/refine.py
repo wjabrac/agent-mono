@@ -28,9 +28,9 @@ from llama_index.core.instrumentation.events.synthesis import (
 )
 from llama_index.core.base.response.schema import (
     StructuredRefineResponse,
-    refinement_loop,
+    refine_program_loop,
+    arefine_program_loop,
 )
-from llama_index.core.async_utils import asyncio_run
 import llama_index.core.instrumentation as instrument
 
 dispatcher = instrument.get_dispatcher(__name__)
@@ -264,20 +264,23 @@ class Refine(BaseSynthesizer):
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
         """Refine response."""
-        return asyncio_run(
-            refinement_loop(
-                self._program_factory,
-                self._llm,
-                self._prompt_helper,
-                self._refine_template,
-                response,
-                query_str,
-                text_chunk,
-                self._streaming,
-                self._verbose,
-                False,
-                **response_kwargs,
-            )
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return self._llm.stream(template, context_msg=chunk, **kwargs)
+
+        return refine_program_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
 
     @dispatcher.span
@@ -324,18 +327,23 @@ class Refine(BaseSynthesizer):
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
         """Refine response."""
-        return await refinement_loop(
-            self._program_factory,
-            self._llm,
-            self._prompt_helper,
-            self._refine_template,
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return await self._llm.astream(template, context_msg=chunk, **kwargs)
+
+        return await arefine_program_loop(
             response,
             query_str,
             text_chunk,
-            self._streaming,
-            self._verbose,
-            True,
-            **response_kwargs,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
 
     async def _agive_response_single(
