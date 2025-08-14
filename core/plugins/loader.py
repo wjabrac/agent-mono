@@ -12,10 +12,9 @@ from typing import Iterable, Dict, Any, List
 from importlib import import_module
 
 from pydantic import BaseModel, ValidationError
-from core.tools.registry import ToolSpec, register
 
-# Track loaded plugin manifests by path -> mtime
-_loaded: Dict[str, float] = {}
+# Track loaded plugin manifests by path -> {"mtime": float, "tools": [names]}
+_loaded: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -64,11 +63,19 @@ def _load_module_from_path(path: str) -> ModuleType:
     return module
 
 
-def _register_from_module(module: ModuleType) -> None:
-    """Register any ToolSpec instances defined in a loaded module."""
+def _register_from_module(module: ModuleType) -> List[str]:
+    """Register any ToolSpec instances defined in a loaded module.
+
+    Returns a list of tool names that were registered.
+    """
+    from core.tools.registry import ToolSpec, register
+
+    tools: List[str] = []
     for _, obj in inspect.getmembers(module):
         if isinstance(obj, ToolSpec):
             register(obj)
+            tools.append(obj.name)
+    return tools
 
 
 def load_plugin(entry_path: str) -> None:
@@ -110,15 +117,19 @@ def discover_plugins(root: str = "plugins") -> None:
     if not os.path.isdir(root):
         return
     with _lock:
+        from core.tools.registry import _REGISTRY  # late import to avoid circular
+        previously_loaded = set(_loaded.keys())
         for dirpath, _, filenames in os.walk(root):
             if "plugin.json" not in filenames:
                 continue
             manifest_path = os.path.join(dirpath, "plugin.json")
+            previously_loaded.discard(manifest_path)
             try:
                 mtime = os.path.getmtime(manifest_path)
             except OSError:
                 continue
-            if _loaded.get(manifest_path) == mtime:
+            current = _loaded.get(manifest_path)
+            if current and current.get("mtime") == mtime:
                 # unchanged
                 continue
             try:
@@ -128,11 +139,25 @@ def discover_plugins(root: str = "plugins") -> None:
                 entry_path = os.path.join(dirpath, manifest.entry)
                 # Use hot-reload-safe loader here as well
                 module = _load_module_from_path(entry_path)
-                _register_from_module(module)
-                _loaded[manifest_path] = mtime
+                # Remove previously registered tools for this manifest
+                if current:
+                    for t in current.get("tools", []):
+                        _REGISTRY.pop(t, None)
+                tools = _register_from_module(module)
+                _loaded[manifest_path] = {"mtime": mtime, "tools": tools}
             except (IOError, ValidationError, Exception) as e:
                 _log_error(manifest_path, e)
                 continue
+        # Remove tools from manifests that disappeared from disk
+        for manifest_path in list(previously_loaded):
+            if os.path.exists(manifest_path):
+                continue
+            info = _loaded.get(manifest_path)
+            if not info:
+                continue
+            for t in info.get("tools", []):
+                _REGISTRY.pop(t, None)
+            _loaded.pop(manifest_path, None)
 
 
 # -----------------------------
@@ -143,6 +168,8 @@ def load_plugins(package: str = "plugins") -> List[str]:
     Import each submodule under the given package and register a top-level `spec`
     if present.
     """
+    from core.tools.registry import ToolSpec, register
+
     loaded: List[str] = []
     try:
         pkg = import_module(package)

@@ -27,3 +27,25 @@ def test_bad_manifest(tmp_path):
     discover_plugins(str(tmp_path))
     # Should not raise and not register anything
     assert all(name != "" for name in _REGISTRY)
+
+
+def test_removed_plugin(tmp_path):
+    plug = tmp_path / "del" / "plug"
+    plug.mkdir(parents=True)
+    (plug / "plugin.json").write_text(json.dumps({
+        "name": "tmpdel",
+        "version": "0.0.1",
+        "entry": "main.py",
+    }))
+    (plug / "main.py").write_text(
+        "from core.tools.registry import ToolSpec\n"
+        "def run(args):\n    return {'ok': True}\n"
+        "spec = ToolSpec(name='tmp_tool_remove', input_model=None, run=run)\n"
+    )
+    discover_plugins(str(tmp_path))
+    assert "tmp_tool_remove" in _REGISTRY
+    # Remove the plugin directory and rediscover
+    import shutil
+    shutil.rmtree(plug)
+    discover_plugins(str(tmp_path))
+    assert "tmp_tool_remove" not in _REGISTRY
