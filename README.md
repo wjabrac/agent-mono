@@ -12,10 +12,18 @@
 2. **Create a plugin template**
 
    ```bash
-   python tools/agent_plugin_cli.py plugin create my_plugin
+   python tools/agent_cli.py create plugin my_plugin
    ```
 
    This generates `plugins/my_plugin` with a stub `ToolSpec` implementation.
+
+   To scaffold a new service instead:
+
+   ```bash
+   python tools/agent_cli.py create service my_service
+   ```
+
+   which creates `services/my_service` with a minimal FastAPI app.
 
 3. **Enable optional features** (all disabled by default)
 

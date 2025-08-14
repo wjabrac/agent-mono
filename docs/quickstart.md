@@ -13,11 +13,15 @@ Any Python package manager can be used. The project targets Python 3.10+.
 ## Creating a plugin
 
 ```bash
-python tools/agent_plugin_cli.py plugin create my_plugin
+python tools/agent_cli.py create plugin my_plugin
 ```
 
 A new folder `plugins/my_plugin` is created with a minimal `ToolSpec` that you
-can extend.
+can extend. To scaffold a service instead:
+
+```bash
+python tools/agent_cli.py create service my_service
+```
 
 ## Enabling optional modules
 

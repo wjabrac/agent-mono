@@ -1,3 +1,7 @@
+"""Legacy plugin CLI preserved for reference.
+Use tools/agent_cli.py instead.
+"""
+
 import argparse
 import json
 from pathlib import Path
@@ -5,7 +9,7 @@ from pathlib import Path
 TEMPLATE = (
     "from core.tools.registry import ToolSpec\n\n"
     "def run(args):\n"
-    "    return {{}}\n\n"
+    "    return {}\n\n"
     "spec = ToolSpec(name=\"{name}\", input_model=None, run=run)\n"
 )
 
