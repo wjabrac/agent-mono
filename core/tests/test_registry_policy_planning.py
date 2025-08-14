@@ -45,7 +45,11 @@ def test_retries_and_e2e_smoke(monkeypatch):
 	class _Resp:
 		def __init__(self, text="ok"): self.text = text
 		def raise_for_status(self): return None
-	monkeypatch.setattr(wf.requests, "get", lambda url, timeout=15: _Resp("ok"))
+	if wf.requests is not None:
+		monkeypatch.setattr(wf.requests, "get", lambda url, timeout=15: _Resp("ok"))
+	else:
+		import urllib.request
+		monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=15: SimpleNamespace(read=lambda: b"ok"))
 	out = execute_steps("fetch https://example.com")
 	assert "trace_id" in out
 	assert isinstance(out.get("outputs"), list)

@@ -39,40 +39,74 @@ MEM_DDL = [
   ttl_s INTEGER DEFAULT 0,
   created_at INTEGER DEFAULT (strftime('%s','now'))
 );""",
+# session key-value store
+"""CREATE TABLE IF NOT EXISTS session_kv(
+  id TEXT PRIMARY KEY,
+  thread_id TEXT,
+  key TEXT,
+  value TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now'))
+);""",
 ]
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL;")
-    return conn
+	conn = sqlite3.connect(DB_PATH)
+	conn.execute("PRAGMA journal_mode=WAL;")
+	return conn
 
 def init():
-    c = get_conn()
-    for ddl in MEM_DDL: c.execute(ddl)
-    c.commit(); c.close()
+	with get_conn() as c:
+		for ddl in MEM_DDL:
+			c.execute(ddl)
 
 # Simple cache helpers
 
 def cache_get(tool: str, args_hash: str) -> str | None:
-    c = get_conn()
-    row = c.execute(
-        "SELECT value, ttl_s, created_at FROM tool_cache WHERE tool=? AND args_hash=?",
-        (tool, args_hash)
-    ).fetchone()
-    c.close()
-    if not row:
-        return None
-    value, ttl_s, created_at = row
-    if ttl_s and int(time.time()) - int(created_at) > int(ttl_s):
-        # expired
-        c = get_conn(); c.execute("DELETE FROM tool_cache WHERE tool=? AND args_hash=?", (tool, args_hash)); c.commit(); c.close()
-        return None
-    return value
+	with get_conn() as c:
+		row = c.execute(
+			"SELECT value, ttl_s, created_at FROM tool_cache WHERE tool=? AND args_hash=?",
+			(tool, args_hash)
+		).fetchone()
+	if not row:
+		return None
+	value, ttl_s, created_at = row
+	if ttl_s and int(time.time()) - int(created_at) > int(ttl_s):
+		with get_conn() as c:
+			c.execute("DELETE FROM tool_cache WHERE tool=? AND args_hash=?", (tool, args_hash))
+		return None
+	return value
 
 def cache_put(tool: str, args_hash: str, value: str, ttl_s: int = 0, version: int = 1) -> None:
-    c = get_conn()
-    c.execute(
-        "INSERT OR REPLACE INTO tool_cache(cache_key, tool, args_hash, value, version, ttl_s, created_at) VALUES(?,?,?,?,?,?,strftime('%s','now'))",
-        (f"{tool}:{args_hash}", tool, args_hash, value, version, ttl_s)
-    )
-    c.commit(); c.close()
+	with get_conn() as c:
+		c.execute(
+			"INSERT OR REPLACE INTO tool_cache(cache_key, tool, args_hash, value, version, ttl_s, created_at) VALUES(?,?,?,?,?,?,strftime('%s','now'))",
+			(f"{tool}:{args_hash}", tool, args_hash, value, version, ttl_s)
+		)
+
+# Session KV helpers
+
+def kv_put(thread_id: str | None, key: str, value: str) -> None:
+	if not thread_id:
+		return
+	with get_conn() as c:
+		c.execute(
+			"INSERT OR REPLACE INTO session_kv(id, thread_id, key, value, created_at) VALUES(?,?,?,?,strftime('%s','now'))",
+			(f"{thread_id}:{key}", thread_id, key, value)
+		)
+
+def kv_get(thread_id: str | None, key: str) -> str | None:
+	if not thread_id:
+		return None
+	with get_conn() as c:
+		row = c.execute("SELECT value FROM session_kv WHERE thread_id=? AND key=?", (thread_id, key)).fetchone()
+	return row[0] if row else None
+
+def kv_recent(thread_id: str | None, limit: int = 20) -> list[tuple[str, str, int]]:
+	if not thread_id:
+		return []
+	with get_conn() as c:
+		rows = c.execute(
+			"SELECT key, value, created_at FROM session_kv WHERE thread_id=? ORDER BY created_at DESC LIMIT ?",
+			(thread_id, limit)
+		).fetchall()
+	return [(r[0], r[1], int(r[2])) for r in rows]

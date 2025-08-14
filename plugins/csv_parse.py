@@ -1,23 +1,13 @@
-from typing import Dict, Any, List
 import csv
-from pydantic import BaseModel
+from io import StringIO
 from core.instrumentation import instrument_tool
 from core.tools.registry import ToolSpec
 
-class CsvInput(BaseModel):
-    path: str
-    limit: int = 1000
 
 @instrument_tool("csv_parse")
-def _run(args: Dict[str, Any]) -> Dict[str, Any]:
-    data = CsvInput(**args)
-    rows: List[List[str]] = []
-    with open(data.path, newline="", encoding="utf-8", errors="ignore") as f:
-        reader = csv.reader(f)
-        for i, row in enumerate(reader):
-            if i >= data.limit:
-                break
-            rows.append(row)
-    return {"rows": rows}
+def _run(args):
+	text = args.get("text", "")
+	reader = csv.DictReader(StringIO(text))
+	return {"rows": list(reader)}
 
-csv_parse = ToolSpec(name="csv_parse", input_model=CsvInput, run=_run)
+spec = ToolSpec(name="csv_parse", input_model=None, run=_run)

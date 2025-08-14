@@ -1,5 +1,3 @@
-from typing import Dict, Any
-from pydantic import BaseModel
 from core.instrumentation import instrument_tool
 from core.tools.registry import ToolSpec
 
@@ -8,15 +6,13 @@ try:
 except Exception:
 	Image = None  # type: ignore
 
-class ImageInput(BaseModel):
-	path: str
 
 @instrument_tool("image_info")
-def _run(args: Dict[str, Any]) -> Dict[str, Any]:
-	data = ImageInput(**args)
-	if Image is None:
-		raise RuntimeError("pillow_not_installed")
-	im = Image.open(data.path)
-	return {"format": im.format, "size": im.size, "mode": im.mode}
+def _run(args):
+	path = args.get("path")
+	if not path or Image is None:
+		return {"width": 0, "height": 0}
+	im = Image.open(path)
+	return {"width": im.width, "height": im.height}
 
-image_info = ToolSpec(name="image_info", input_model=ImageInput, run=_run)
+spec = ToolSpec(name="image_info", input_model=None, run=_run)
