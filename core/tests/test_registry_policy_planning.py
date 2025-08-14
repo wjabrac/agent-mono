@@ -49,3 +49,20 @@ def test_retries_and_e2e_smoke(monkeypatch):
 	out = execute_steps("fetch https://example.com")
 	assert "trace_id" in out
 	assert isinstance(out.get("outputs"), list)
+
+
+def test_retry_logic(monkeypatch):
+	from core.tools.registry import ToolSpec, register
+	calls = {"n": 0}
+	def flaky(args):
+		calls["n"] += 1
+		if calls["n"] < 2:
+			raise RuntimeError("fail_once")
+		return {"ok": True}
+	spec = ToolSpec(name="_flaky", input_model=None, run=flaky)
+	register(spec)
+	monkeypatch.setenv("HITL_DEFAULT", "false")
+	# Provide explicit steps with retries
+	out = execute_steps("irrelevant", steps=[{"tool": "_flaky", "args": {}, "retries": 2}])
+	assert out["outputs"][0]["tool"] == "_flaky"
+	assert out["outputs"][0]["output"]["ok"] is True
