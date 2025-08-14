@@ -30,6 +30,16 @@ def get(name: str) -> ToolSpec:
     return _REGISTRY[name]
 
 
+def _log_discovery_error(mod_name: str, error: Exception) -> None:
+    try:
+        from core.observability.trace import log_event, start_trace
+        tid = start_trace(None)
+        log_event(tid, "decision", "discovery:error", {"module": mod_name, "error": type(error).__name__, "msg": str(error)})
+    except Exception:
+        # fallback to stderr
+        sys.stderr.write(f"[discovery:error] {mod_name}: {type(error).__name__}: {error}\n")
+
+
 def _load_remote_tools_from_config() -> None:
     if not _REMOTE_CONFIG_PATH or not os.path.exists(_REMOTE_CONFIG_PATH):
         return
@@ -44,33 +54,42 @@ def _load_remote_tools_from_config() -> None:
                 register(spec)
             except Exception:
                 continue
-    except Exception:
-        pass
+    except Exception as e:
+        _log_discovery_error("remote_tools_config", e)
 
 
 def _do_discover(package: str) -> None:
-    pkg = importlib.import_module(package)
+    try:
+        pkg = importlib.import_module(package)
+    except Exception as e:
+        _log_discovery_error(package, e); return
     for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
-        mod = importlib.import_module(f"{package}.{modname}")
+        try:
+            mod = importlib.import_module(f"{package}.{modname}")
+        except Exception as e:
+            _log_discovery_error(f"{package}.{modname}", e); continue
         for _, obj in inspect.getmembers(mod):
             if isinstance(obj, ToolSpec):
                 register(obj)
 
 
 def _discover_microtools_from_dirs() -> None:
-    for root in _MICROTOOL_DIRS:
-        if not root or not os.path.isdir(root):
+    # Ensure project root is present only once
+    root = os.path.abspath(".")
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    for dirpath in list(_MICROTOOL_DIRS):
+        if not dirpath or not os.path.isdir(dirpath):
             continue
-        sys.path.insert(0, os.path.abspath("."))
-        for fname in os.listdir(root):
+        for fname in os.listdir(dirpath):
             if not fname.endswith(".py") or fname.startswith("_"):
                 continue
             mod_path = os.path.splitext(fname)[0]
-            full_mod = f"{root.replace('/', '.').strip('.')}.{mod_path}" if root != "." else mod_path
+            full_mod = f"{dirpath.replace('/', '.').strip('.')}.{mod_path}" if dirpath != "." else mod_path
             try:
                 mod = importlib.import_module(full_mod)
-            except Exception:
-                continue
+            except Exception as e:
+                _log_discovery_error(full_mod, e); continue
             for _, fn in inspect.getmembers(mod, inspect.isfunction):
                 mt = getattr(fn, "_microtool_spec", None)
                 if mt is None:
@@ -79,9 +98,10 @@ def _discover_microtools_from_dirs() -> None:
                     from core.tools.microtool import build_toolspec_from_microtool
                     spec = build_toolspec_from_microtool(fn)
                     register(spec)
-                    ensure_tool_entry(mt.name, path=os.path.join(root, fname), tags=mt.tags, composite_of=[], description=mt.description)
-                except Exception:
-                    continue
+                    # Now that we know the source file and mt metadata, record manifest entry
+                    ensure_tool_entry(mt.name, path=os.path.join(dirpath, fname), tags=mt.tags, composite_of=[], description=mt.description)
+                except Exception as e:
+                    _log_discovery_error(full_mod, e); continue
 
 
 def _discover_templates() -> None:
@@ -116,16 +136,16 @@ def _discover_templates() -> None:
             run = _make(name, steps, desc)
             register(ToolSpec(name=name, input_model=None, run=run))
             ensure_tool_entry(name, path=path, tags=["template"], composite_of=[st.get("tool") for st in steps], description=desc)
-    except Exception:
-        return
+    except Exception as e:
+        _log_discovery_error("templates", e); return
 
 
 def discover(package: str = "plugins") -> None:
     if os.getenv("ENABLE_MCP", "true").lower() in ("1","true","yes"):
         try:
             import core.tools.mcp_adapter  # noqa: F401
-        except Exception:
-            pass
+        except Exception as e:
+            _log_discovery_error("mcp_adapter", e)
     with _lock:
         if package:
             _do_discover(package)
@@ -151,7 +171,7 @@ def reload_if_needed() -> None:
     for pkg in list(set(_DISCOVERED_PACKAGES)):
         try:
             _do_discover(pkg)
-        except Exception:
-            continue
+        except Exception as e:
+            _log_discovery_error(pkg, e); continue
     _discover_microtools_from_dirs()
     _discover_templates()

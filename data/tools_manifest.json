@@ -46,42 +46,42 @@
   },
   "compare": {
     "path": "",
-    "uses": 2,
+    "uses": 3,
     "errors": 0,
     "tags": [
       "compare"
     ],
     "composite_of": [],
     "description": "Compare two values",
-    "last_used": 1755165478
+    "last_used": 1755165688
   },
   "optimize": {
     "path": "",
-    "uses": 2,
+    "uses": 3,
     "errors": 0,
     "tags": [
       "composite"
     ],
     "composite_of": [],
     "description": "Simple composite: search then compare first match",
-    "last_used": 1755165478
+    "last_used": 1755165688
   },
   "_flaky": {
     "path": "",
-    "uses": 2,
+    "uses": 3,
     "errors": 0,
     "tags": [],
     "composite_of": [],
     "description": "",
-    "last_used": 1755165480
+    "last_used": 1755165690
   },
   "web_fetch": {
     "path": "",
-    "uses": 1,
-    "errors": 1,
+    "uses": 2,
+    "errors": 2,
     "tags": [],
     "composite_of": [],
     "description": "",
-    "last_used": 1755165479
+    "last_used": 1755165689
   }
 }
