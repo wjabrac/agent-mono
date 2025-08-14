@@ -51,3 +51,5 @@ All are disabled by default. See `docs/architecture/tool-runtime-and-planning.md
 ---
 
 For development conventions and testing commands, see [AGENTS.md](AGENTS.md).
+
+For an overview of outstanding work and integration plans, see [docs/project-scope.md](docs/project-scope.md).

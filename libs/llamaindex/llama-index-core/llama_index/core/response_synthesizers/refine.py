@@ -1,3 +1,5 @@
+# libs/llamaindex/llama-index-core/llama_index/core/response_synthesizers/refine.py
+
 import logging
 from typing import (
     Any,
@@ -248,7 +250,6 @@ class Refine(BaseSynthesizer):
         text_chunk: str,
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
-        # centralize via helper; wrapper handles sync/async bridging
         async def stream_fn(
             template: BasePromptTemplate, chunk: str, **kwargs: Any
         ) -> RESPONSE_TEXT_TYPE:
@@ -379,3 +380,4 @@ class Refine(BaseSynthesizer):
         else:
             response = cast(AsyncGenerator, response)
         return response
+
