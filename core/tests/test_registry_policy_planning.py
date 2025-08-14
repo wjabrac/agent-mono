@@ -1,6 +1,7 @@
-import os, json, tempfile
-from core.tools.registry import discover, get, _REGISTRY
-from core.planning.advanced import expand_plan
+import importlib
+from types import SimpleNamespace
+from core.tools.registry import discover, _REGISTRY
+import core.planning.advanced as adv
 from core.security.policy import check_tool_allowed
 from core.agentControl import execute_steps
 
@@ -27,17 +28,24 @@ def test_policy_path_restrictions(tmp_path, monkeypatch):
 
 def test_planning_conditionals(monkeypatch):
 	monkeypatch.setenv("ADVANCED_PLANNING", "true")
+	importlib.reload(adv)
 	plan = [
 		{"if": True, "then": [{"tool": "web_fetch", "args": {"url": "https://example.com"}}]},
 		{"loop": {"times": 2}, "steps": [{"tool": "web_fetch", "args": {"url": "https://example.com"}}]},
 	]
-	expanded = expand_plan(plan)
+	expanded = adv.expand_plan(plan)
 	assert len(expanded) == 3
 
 
 def test_retries_and_e2e_smoke(monkeypatch):
-	# minimal e2e path with rule-based planning and HITL disabled
+	# Disable interactive approvals
 	monkeypatch.setenv("HITL_DEFAULT", "false")
+	# Avoid real network: stub requests.get used by plugins.web_fetch
+	import plugins.web_fetch as wf
+	class _Resp:
+		def __init__(self, text="ok"): self.text = text
+		def raise_for_status(self): return None
+	monkeypatch.setattr(wf.requests, "get", lambda url, timeout=15: _Resp("ok"))
 	out = execute_steps("fetch https://example.com")
 	assert "trace_id" in out
 	assert isinstance(out.get("outputs"), list)

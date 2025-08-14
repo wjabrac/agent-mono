@@ -239,7 +239,11 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
         if len(wave) > 1 and _needs_hitl(wave):
             _await_human_approval("phase:wave_start", wave)
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(wave))) as ex:
-            futures = {ex.submit(_run_with_policy, s, trace_id): s for s in wave}
+            futures = {}
+            for s in wave:
+                if os.getenv("HITL_PER_STEP", "false").lower() in ("1","true","yes"):
+                    _await_human_approval("phase:step", [s])
+                futures[ex.submit(_run_with_policy, s, trace_id)] = s
             for fut, s in list(futures.items()):
                 try:
                     res = fut.result()
