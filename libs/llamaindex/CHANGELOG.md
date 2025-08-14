@@ -7,6 +7,7 @@
 - fix: safer token counting in messages (#19599)
 - fix: Fix Document truncation in `FunctionTool._parse_tool_output` (#19585)
 - feat: Enabled partially formatted system prompt for ReAct agent (#19598)
+- fix: ensure function mappings receive combined runtime and fixed kwargs
 
 ### `llama-index-embeddings-ollama` [0.8.0]
 
