@@ -70,7 +70,7 @@ def plan_steps(prompt: str) -> List[Dict[str, Any]]:
         try:
             # Minimal Ollama prompt to propose tools from registry
             tool_list = ", ".join(sorted(_REGISTRY.keys()))
-            q = f"You are a planner. Given a task: '{prompt}', propose a short ordered JSON list of steps using tools from: [{tool_list}]. Each step: {tool, args}."
+            q = f"You are a planner. Given a task: '{prompt}', propose a short ordered JSON list of steps using tools from: [{tool_list}]. Each step object must be of the form {{\"tool\": \"...\", \"args\": {{...}}}}."
             base = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
             r = httpx.post(f"{base}/api/generate", json={"model": os.getenv("OLLAMA_MODEL","llama3.1:8b"), "prompt": q, "stream": False}, timeout=8)
             r.raise_for_status()
