@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Protocol, TypedDict, Union, Unpack
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlunparse
 
 import mammoth
@@ -43,6 +43,22 @@ try:
     IS_YOUTUBE_TRANSCRIPT_CAPABLE = True
 except ModuleNotFoundError:
     pass
+
+
+class ConvertOptions(TypedDict, total=False):
+    """Optional parameters accepted by conversion methods."""
+
+    file_extension: Optional[str]
+    mlm_client: Any
+    mlm_model: Any
+    mlm_prompt: Optional[str]
+
+
+class StreamLike(Protocol):
+    """Minimal interface for readable streams used by ``convert_stream``."""
+
+    def read(self, *args: Any, **kwargs: Any) -> Union[str, bytes]:
+        """Return the stream contents as ``str`` or ``bytes``."""
 
 
 class _CustomMarkdownify(markdownify.MarkdownConverter):
@@ -837,12 +853,17 @@ class MarkdownConverter:
         self.register_page_converter(PdfConverter())
 
     def convert(
-        self, source: Union[str, requests.Response], **kwargs: Any
-    ) -> DocumentConverterResult:  # TODO: deal with kwargs
-        """
+        self,
+        source: Union[str, requests.Response],
+        **kwargs: Unpack[ConvertOptions],
+    ) -> DocumentConverterResult:
+        """Convert a local path, URL, or ``requests.Response`` to Markdown.
+
         Args:
-            - source: can be a string representing a path or url, or a requests.response object
-            - extension: specifies the file extension to use when interpreting the file. If None, infer from source (path, uri, content-type, etc.)
+            source: A filesystem path, a URL (``http://``, ``https://`` or ``file://``)
+                or an HTTP ``requests.Response`` object.
+            **kwargs: Optional conversion settings. See ``ConvertOptions`` for
+                supported keys.
         """
 
         # Local path or url
@@ -855,7 +876,16 @@ class MarkdownConverter:
         elif isinstance(source, requests.Response):
             return self.convert_response(source, **kwargs)
 
-    def convert_local(self, path: str, **kwargs: Any) -> DocumentConverterResult:  # TODO: deal with kwargs
+    def convert_local(
+        self, path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> DocumentConverterResult:
+        """Convert a file on the local filesystem to Markdown.
+
+        Args:
+            path: Path to the file on disk.
+            **kwargs: Optional conversion settings. See ``ConvertOptions`` for
+                supported keys.
+        """
         # Prepare a list of extensions to try (in order of priority)
         ext = kwargs.get("file_extension")
         extensions = [ext] if ext is not None else []
@@ -868,8 +898,19 @@ class MarkdownConverter:
         # Convert
         return self._convert(path, extensions, **kwargs)
 
-    # TODO what should stream's type be?
-    def convert_stream(self, stream: Any, **kwargs: Any) -> DocumentConverterResult:  # TODO: deal with kwargs
+    def convert_stream(
+        self, stream: StreamLike, **kwargs: Unpack[ConvertOptions]
+    ) -> DocumentConverterResult:
+        """Convert content provided by a readable stream to Markdown.
+
+        The ``stream`` object must implement ``read()`` and return either
+        ``bytes`` or ``str``.
+
+        Args:
+            stream: Object yielding file content via ``read``.
+            **kwargs: Optional conversion settings. See ``ConvertOptions`` for
+                supported keys.
+        """
         # Prepare a list of extensions to try (in order of priority)
         ext = kwargs.get("file_extension")
         extensions = [ext] if ext is not None else []
@@ -902,7 +943,16 @@ class MarkdownConverter:
 
         return result
 
-    def convert_url(self, url: str, **kwargs: Any) -> DocumentConverterResult:  # TODO: fix kwargs type
+    def convert_url(
+        self, url: str, **kwargs: Unpack[ConvertOptions]
+    ) -> DocumentConverterResult:
+        """Download a URL and convert its contents to Markdown.
+
+        Args:
+            url: ``http://`` or ``https://`` URL pointing to the resource.
+            **kwargs: Optional conversion settings. See ``ConvertOptions`` for
+                supported keys.
+        """
         # Send a HTTP request to the URL
         response = self._requests_session.get(url, stream=True)
         response.raise_for_status()
