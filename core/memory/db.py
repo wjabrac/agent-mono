@@ -1,4 +1,4 @@
-import os, sqlite3
+import os, sqlite3, time
 DB_PATH = os.getenv("AGENT_DB", "data/agent_memory.sqlite")
 MEM_DDL = [
 """CREATE TABLE IF NOT EXISTS memory_entities(
@@ -29,12 +29,50 @@ MEM_DDL = [
   id TEXT PRIMARY KEY, trace_id TEXT, phase TEXT, role TEXT, payload TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(trace_id) REFERENCES traces(id));""",
+# new cache table
+"""CREATE TABLE IF NOT EXISTS tool_cache(
+  cache_key TEXT PRIMARY KEY,
+  tool TEXT NOT NULL,
+  args_hash TEXT NOT NULL,
+  value TEXT,
+  version INTEGER DEFAULT 1,
+  ttl_s INTEGER DEFAULT 0,
+  created_at INTEGER DEFAULT (strftime('%s','now'))
+);""",
 ]
+
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
+
 def init():
     c = get_conn()
     for ddl in MEM_DDL: c.execute(ddl)
+    c.commit(); c.close()
+
+# Simple cache helpers
+
+def cache_get(tool: str, args_hash: str) -> str | None:
+    c = get_conn()
+    row = c.execute(
+        "SELECT value, ttl_s, created_at FROM tool_cache WHERE tool=? AND args_hash=?",
+        (tool, args_hash)
+    ).fetchone()
+    c.close()
+    if not row:
+        return None
+    value, ttl_s, created_at = row
+    if ttl_s and int(time.time()) - int(created_at) > int(ttl_s):
+        # expired
+        c = get_conn(); c.execute("DELETE FROM tool_cache WHERE tool=? AND args_hash=?", (tool, args_hash)); c.commit(); c.close()
+        return None
+    return value
+
+def cache_put(tool: str, args_hash: str, value: str, ttl_s: int = 0, version: int = 1) -> None:
+    c = get_conn()
+    c.execute(
+        "INSERT OR REPLACE INTO tool_cache(cache_key, tool, args_hash, value, version, ttl_s, created_at) VALUES(?,?,?,?,?,?,strftime('%s','now'))",
+        (f"{tool}:{args_hash}", tool, args_hash, value, version, ttl_s)
+    )
     c.commit(); c.close()
