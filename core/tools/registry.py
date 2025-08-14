@@ -27,9 +27,9 @@ def register(tool: ToolSpec) -> None:
 
 def get(name: str) -> ToolSpec:
     if name not in _REGISTRY:
-        record_tool_request(name, "false")
+        record_tool_request(name, "not_found")
         raise KeyError(f"tool not found: {name}")
-    record_tool_request(name, "true")
+    record_tool_request(name, "found")
     return _REGISTRY[name]
 
 
