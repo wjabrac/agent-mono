@@ -145,10 +145,12 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                 register_usage_metric(step.tool, success=True)
             except Exception:
                 pass
+            log_event(trace_id, "decision", "tool:result", {"tool": step.tool, "success": True})
             return {"tool": step.tool, "output": res}
         except Exception as e:
             last_err = e
             tool_calls_total.labels(step.tool, "false").inc()
+            log_event(trace_id, "decision", "tool:result", {"tool": step.tool, "success": False, "error": type(e).__name__, "msg": str(e), "attempt": attempt+1})
             log_event(trace_id, "decision", "executor:error", {"tool": step.tool, "error": type(e).__name__, "msg": str(e), "attempt": attempt+1})
             time.sleep(min(1.5**attempt, 5))
     # fallback
@@ -272,6 +274,11 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(wave))) as ex:
             futures = {}
             for s in wave:
+                try:
+                    spec = get(s.tool)
+                except KeyError:
+                    log_event(trace_id, "decision", "tool:lookup_error", {"tool": s.tool})
+                    raise
                 if os.getenv("HITL_PER_STEP", "false").lower() in ("1","true","yes"):
                     _await_human_approval("phase:step", [s])
                 futures[ex.submit(_run_with_policy, s, trace_id)] = s

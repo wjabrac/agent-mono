@@ -1,14 +1,47 @@
 """Response schema."""
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Sequence,
+    Callable,
+    Generator,
+    AsyncGenerator,
+    cast,
+)
 
 from llama_index.core.async_utils import asyncio_run
-from llama_index.core.bridge.pydantic import BaseModel
+from llama_index.core.bridge.pydantic import BaseModel, Field, ValidationError
 from llama_index.core.schema import NodeWithScore
-from llama_index.core.types import TokenGen, TokenAsyncGen
+from llama_index.core.types import TokenGen, TokenAsyncGen, RESPONSE_TEXT_TYPE
 from llama_index.core.utils import truncate_text
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core.prompts.base import BasePromptTemplate
+    from llama_index.core.indices.prompt_helper import PromptHelper
+    from llama_index.core.llms import LLM
+    from llama_index.core.types import BasePydanticProgram
+
+
+logger = logging.getLogger(__name__)
+
+
+class StructuredRefineResponse(BaseModel):
+    """Response schema used for structured refining."""
+
+    answer: str = Field(
+        description="The answer for the given query, based on the context and not prior knowledge."
+    )
+    query_satisfied: bool = Field(
+        description="True if there was enough context given to provide an answer that satisfies the query."
+    )
 
 
 @dataclass
@@ -239,3 +272,98 @@ class AsyncStreamingResponse:
 RESPONSE_TYPE = Union[
     Response, StreamingResponse, AsyncStreamingResponse, PydanticResponse
 ]
+
+
+async def refinement_loop(
+    program_factory: Callable[["BasePromptTemplate"], "BasePydanticProgram"],
+    llm: "LLM",
+    prompt_helper: "PromptHelper",
+    refine_template: "BasePromptTemplate",
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    streaming: bool,
+    verbose: bool,
+    is_async: bool,
+    **response_kwargs: Any,
+) -> Optional[RESPONSE_TEXT_TYPE]:
+    """Run the refinement loop for a single text chunk."""
+
+
+    from llama_index.core.response.utils import (
+        get_response_text,
+        aget_response_text,
+    )
+
+    if isinstance(response, Generator):
+        response = get_response_text(response)
+    if isinstance(response, AsyncGenerator):
+        response = await aget_response_text(response)
+
+    fmt_text_chunk = truncate_text(text_chunk, 50)
+    logger.debug(f"> Refine context: {fmt_text_chunk}")
+    if verbose:
+        print(f"> Refine context: {fmt_text_chunk}")
+
+    refine_template = refine_template.partial_format(
+        query_str=query_str, existing_answer=response
+    )
+
+    avail_chunk_size = prompt_helper._get_available_chunk_size(refine_template)
+    if avail_chunk_size < 0:
+        return response
+
+    text_chunks = prompt_helper.repack(
+        refine_template, text_chunks=[text_chunk], llm=llm
+    )
+
+    program = program_factory(refine_template)
+
+    if is_async:
+        async def call_program(context_msg: str) -> StructuredRefineResponse:
+            return await program.acall(context_msg=context_msg, **response_kwargs)
+
+        async def stream_response(
+            template: BasePromptTemplate, context_msg: str
+        ) -> RESPONSE_TEXT_TYPE:
+            return await llm.astream(
+                template, context_msg=context_msg, **response_kwargs
+            )
+    else:
+        async def call_program(context_msg: str) -> StructuredRefineResponse:
+            return program(context_msg=context_msg, **response_kwargs)
+
+        async def stream_response(
+            template: BasePromptTemplate, context_msg: str
+        ) -> RESPONSE_TEXT_TYPE:
+            return llm.stream(template, context_msg=context_msg, **response_kwargs)
+
+    for cur_text_chunk in text_chunks:
+        query_satisfied = False
+        if not streaming:
+            try:
+                structured_response = await call_program(cur_text_chunk)
+                structured_response = cast(
+                    StructuredRefineResponse, structured_response
+                )
+                query_satisfied = structured_response.query_satisfied
+                if query_satisfied:
+                    response = structured_response.answer
+            except ValidationError as e:
+                logger.warning(
+                    f"Validation error on structured response: {e}", exc_info=True
+                )
+        else:
+            if isinstance(response, Generator):
+                response = "".join(response)
+            if isinstance(response, AsyncGenerator):
+                tmp = ""
+                async for text in response:
+                    tmp += text
+                response = tmp
+            refine_template = refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+            response = await stream_response(refine_template, cur_text_chunk)
+
+    return response

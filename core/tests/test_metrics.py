@@ -15,7 +15,12 @@ def _fresh_counter(monkeypatch):
 
 def test_record_tool_request_found(monkeypatch):
     registry = _fresh_counter(monkeypatch)
-    monkeypatch.setattr(metrics.registry, "get", lambda name: object())
+
+    class FoundRegistry:
+        def get(self, name):
+            return object()
+
+    monkeypatch.setattr(metrics, "registry", FoundRegistry())
 
     metrics.record_tool_request("echo")
 
@@ -30,10 +35,11 @@ def test_record_tool_request_found(monkeypatch):
 def test_record_tool_request_missing(monkeypatch):
     registry = _fresh_counter(monkeypatch)
 
-    def fake_get(_name):
-        raise KeyError("missing")
+    class MissingRegistry:
+        def get(self, name):
+            raise KeyError("missing")
 
-    monkeypatch.setattr(metrics.registry, "get", fake_get)
+    monkeypatch.setattr(metrics, "registry", MissingRegistry())
 
     with pytest.raises(KeyError):
         metrics.record_tool_request("ghost")

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-mono"
+version = "0.1.0"
+description = "Experimental agent runtime monorepo"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+agent = "tools.agent_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "tools*"]
