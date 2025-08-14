@@ -5,7 +5,7 @@ from core.trace_context import set_trace
 from core.observability.trace import start_trace, log_event
 from core.observability.metrics import tool_calls_total, tool_latency_ms, tool_skipped_total
 from core.memory.db import cache_get, cache_put, kv_put
-import time, os, json, hashlib, concurrent.futures, threading
+import time, os, json, hashlib, concurrent.futures, threading, asyncio, inspect
 
 # Manifest usage tracking
 try:
@@ -131,6 +131,8 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
                     fut = ex.submit(spec.run, step.args)
                     res = fut.result(timeout=step.timeout_s)
+                    if inspect.isawaitable(res):
+                        res = asyncio.run(res)
             enforce_output_limits(step.tool, res)
             tool_calls_total.labels(step.tool, "true").inc()
             tool_latency_ms.labels(step.tool).observe((time.time()-t0)*1000.0)
