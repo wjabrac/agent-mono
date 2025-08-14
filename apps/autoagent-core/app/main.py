@@ -46,7 +46,6 @@ def run_agent(req: RunModel, thread: str | None = Query(default=None), tags: Lis
 # Optional: async via Temporal if worker is up and TEMPORAL_HOST is set
 try:
 	from temporalio.client import Client
-	from services.temporal_worker.workflow import AgentWorkflowInput  # type: ignore
 	HAVE_TEMPORAL = True
 except Exception:
 	HAVE_TEMPORAL = False
@@ -57,11 +56,14 @@ async def run_async(req: RunModel, thread: str | None = Query(default=None), tag
 	target = os.getenv("TEMPORAL_HOST","temporal:7233")
 	client = await Client.connect(target)
 	wid = f"agent-{thread or 'default'}"
-	from services.temporal_worker.workflow import AgentWorkflow  # type: ignore
-	inp = AgentWorkflowInput(prompt=req.prompt, steps=(None if req.steps is None else [s.dict() for s in req.steps]), thread=thread, tags=tags or [])
+	steps = None if req.steps is None else [s.dict() for s in req.steps]
+	# Start by workflow name to avoid importing worker module
 	handle = await client.start_workflow(
-		AgentWorkflow.run,
-		inp,
+		"AgentWorkflow",
+		req.prompt,
+		steps,
+		thread,
+		tags or [],
 		id=wid,
 		task_queue="agent-tq",
 	)

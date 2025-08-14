@@ -46,4 +46,4 @@ tool_requests_total = Counter("tool_requests_total", "Tool requests", ["tool","f
 def record_tool_request(tool_name: str, found: str) -> None:
 	# found must be "true" or "false"
 	val = "true" if str(found).lower() in ("1","true","yes") or found == True else "false"  # type: ignore
-	ool_requests_total.labels(tool_name, val).inc()
+	tool_requests_total.labels(tool_name, val).inc()

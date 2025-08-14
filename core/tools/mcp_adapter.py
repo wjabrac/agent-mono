@@ -1,64 +1,77 @@
 import os
-from typing import Dict, Any, Callable
+from typing import Dict, Any
 from pydantic import BaseModel
 from core.tools.registry import ToolSpec, register
+from core.instrumentation import instrument_tool
 
 # Minimal placeholder MCP adapter with local-safe registrations.
 # Extend by actually connecting to MCP servers and mapping methods.
 
 ALLOW_PAID = os.getenv("ALLOW_PAID_APIS", "false").lower() in ("1","true","yes")
 
-# Example: local-only shells/filesystem/http/sqlite/git wrappers can be registered here
-# The implementations below are intentionally simple; replace with MCP client calls as you wire them.
-
 class FSReadInput(BaseModel):
 	path: str
 
-@register(type="tool", name="mcp.fs.read", func_name="mcp_fs_read")
-def mcp_fs_read(path: str) -> str:
-	with open(path, "r", encoding="utf-8", errors="ignore") as f:
-		return f.read()
+@instrument_tool("mcp.fs.read")
+def _mcp_fs_read(args: Dict[str, Any]) -> Dict[str, Any]:
+	data = FSReadInput(**args)
+	with open(data.path, "r", encoding="utf-8", errors="ignore") as f:
+		return {"text": f.read()}
+
+register(ToolSpec(name="mcp.fs.read", input_model=FSReadInput, run=_mcp_fs_read))
 
 class HTTPGetInput(BaseModel):
 	url: str
 	timeout: int = 15
 
-@register(type="tool", name="mcp.http.get", func_name="mcp_http_get")
-def mcp_http_get(url: str, timeout: int = 15) -> str:
+@instrument_tool("mcp.http.get")
+def _mcp_http_get(args: Dict[str, Any]) -> Dict[str, Any]:
+	data = HTTPGetInput(**args)
 	import requests
-	r = requests.get(url, timeout=timeout)
+	r = requests.get(data.url, timeout=data.timeout)
 	r.raise_for_status()
-	return r.text[:200000]
+	return {"text": r.text[:200000]}
+
+register(ToolSpec(name="mcp.http.get", input_model=HTTPGetInput, run=_mcp_http_get))
 
 class SQLiteQueryInput(BaseModel):
 	db_path: str
 	query: str
 
-@register(type="tool", name="mcp.sqlite.query", func_name="mcp_sqlite_query")
-def mcp_sqlite_query(db_path: str, query: str) -> str:
+@instrument_tool("mcp.sqlite.query")
+def _mcp_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
 	import sqlite3, json
-	con = sqlite3.connect(db_path)
-	cur = con.execute(query)
+	data = SQLiteQueryInput(**args)
+	con = sqlite3.connect(data.db_path)
+	cur = con.execute(data.query)
 	cols = [d[0] for d in cur.description] if cur.description else []
 	rows = cur.fetchall()
 	con.close()
-	return json.dumps({"columns": cols, "rows": rows}, ensure_ascii=False)
+	return {"columns": cols, "rows": rows}
+
+register(ToolSpec(name="mcp.sqlite.query", input_model=SQLiteQueryInput, run=_mcp_sqlite_query))
 
 class ShellRunInput(BaseModel):
 	cmd: str
 	timeout: int = 10
 
-@register(type="tool", name="mcp.shell.run", func_name="mcp_shell_run")
-def mcp_shell_run(cmd: str, timeout: int = 10) -> str:
+@instrument_tool("mcp.shell.run")
+def _mcp_shell_run(args: Dict[str, Any]) -> Dict[str, Any]:
 	import subprocess
-	res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-	return (res.stdout or "")[-200000:]
+	data = ShellRunInput(**args)
+	res = subprocess.run(data.cmd, shell=True, capture_output=True, text=True, timeout=data.timeout)
+	return {"stdout": (res.stdout or "")[-200000:], "stderr": (res.stderr or "")[-50000:], "returncode": res.returncode}
+
+register(ToolSpec(name="mcp.shell.run", input_model=ShellRunInput, run=_mcp_shell_run))
 
 class GitStatusInput(BaseModel):
 	repo: str
 
-@register(type="tool", name="mcp.git.status", func_name="mcp_git_status")
-def mcp_git_status(repo: str) -> str:
+@instrument_tool("mcp.git.status")
+def _mcp_git_status(args: Dict[str, Any]) -> Dict[str, Any]:
 	import subprocess
-	res = subprocess.run("git status --porcelain=v1", cwd=repo, shell=True, capture_output=True, text=True)
-	return res.stdout
+	data = GitStatusInput(**args)
+	res = subprocess.run("git status --porcelain=v1", cwd=data.repo, shell=True, capture_output=True, text=True)
+	return {"stdout": res.stdout}
+
+register(ToolSpec(name="mcp.git.status", input_model=GitStatusInput, run=_mcp_git_status))
