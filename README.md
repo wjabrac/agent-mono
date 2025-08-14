@@ -23,7 +23,7 @@
    agent create service my_service
    ```
 
-   which creates `services/my_service` with a minimal FastAPI app.
+  which creates `services/my_service` with a minimal FastAPI app.
 
 3. **Enable optional features** (all disabled by default)
 
@@ -37,20 +37,6 @@
 
 See [`docs/quickstart.md`](docs/quickstart.md) for more details.
 
-## TypeScript example agent
-
-An experimental TypeScript agent lives in `services/ts-agent` and showcases the
-tool, memory, and security modules.
-
-```bash
-cd services/ts-agent
-npm test            # type-check the sources
-npm run build       # compile to JavaScript
-node dist/cli.js    # start the REPL interface
-```
-
-This agent uses DuckDuckGo search, file analysis, and a vector memory backed by
-ChromaDB.
 
 ## Tool registry, policy, HITL, and planning (experimental)
 

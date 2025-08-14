@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+tensorflow
+langchain
+llama-index
