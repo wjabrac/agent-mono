@@ -1,22 +1,9 @@
 {
-  "list.topk": {
-    "path": "",
-    "uses": 0,
-    "errors": 0,
-    "tags": [
-      "util"
-    ],
-    "composite_of": [],
-    "description": "Return top-k items by key",
-    "last_used": 0
-  },
   "text.compare": {
     "path": "",
     "uses": 0,
     "errors": 0,
-    "tags": [
-      "util"
-    ],
+    "tags": ["util"],
     "composite_of": [],
     "description": "Compare two strings",
     "last_used": 0
@@ -25,63 +12,64 @@
     "path": "",
     "uses": 0,
     "errors": 0,
-    "tags": [
-      "util"
-    ],
+    "tags": ["util"],
     "composite_of": [],
     "description": "Find substring in text",
     "last_used": 0
   },
   "search": {
     "path": "",
-    "uses": 0,
+    "uses": 2,
     "errors": 0,
-    "tags": [
-      "search",
-      "list"
-    ],
+    "tags": ["search", "list"],
     "composite_of": [],
     "description": "Search for a term in a list",
-    "last_used": 0
+    "last_used": 1755193850
   },
   "compare": {
     "path": "",
-    "uses": 3,
+    "uses": 5,
     "errors": 0,
-    "tags": [
-      "compare"
-    ],
+    "tags": ["compare"],
     "composite_of": [],
     "description": "Compare two values",
-    "last_used": 1755165688
+    "last_used": 1755193850
   },
   "optimize": {
     "path": "",
-    "uses": 3,
+    "uses": 5,
     "errors": 0,
-    "tags": [
-      "composite"
-    ],
+    "tags": ["composite"],
     "composite_of": [],
     "description": "Simple composite: search then compare first match",
-    "last_used": 1755165688
+    "last_used": 1755193850
   },
   "_flaky": {
     "path": "",
-    "uses": 3,
+    "uses": 4,
     "errors": 0,
     "tags": [],
     "composite_of": [],
     "description": "",
-    "last_used": 1755165690
+    "last_used": 1755193851
   },
   "web_fetch": {
     "path": "",
-    "uses": 2,
+    "uses": 3,
     "errors": 2,
     "tags": [],
     "composite_of": [],
     "description": "",
-    "last_used": 1755165689
+    "last_used": 1755193850
+  },
+  "async_echo": {
+    "path": "",
+    "uses": 2,
+    "errors": 0,
+    "tags": [],
+    "composite_of": [],
+    "description": "",
+    "last_used": 1755193850
   }
 }
+Oh, got it.
