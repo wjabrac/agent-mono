@@ -7,8 +7,7 @@ from urllib.parse import quote, quote_plus, unquote, urlparse, urlunparse
 
 import requests
 
-# TODO: Fix these types
-from .mdconvert import MarkdownConverter  # type: ignore
+from .mdconvert import MarkdownConverter
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class BingMarkdownSearch(AbstractMarkdownSearch):
             bing_api_key: key for the Bing search API. If omitted, an attempt is made to read the key from the BING_API_KEY environment variable. If no key is found, BingMarkdownSearch will print a warning, and will fall back to visiting and scraping the live Bing results page. Scraping is objectively worse than using the API, and thus is not recommended.
             interleave_results: When using the Bing API, results are returned based on category (web, news, videos, etc.), along with instructions for how they should be interleaved on the page. When `interleave` is set to True, these interleaving instructions are followed, and a single results list is returned by BingMarkdownSearch. When `interleave` is set to false, results are separated by category, and no interleaving is done.
         """
-        self._mdconvert = MarkdownConverter()
+        self._mdconvert: MarkdownConverter = MarkdownConverter()
         self._interleave_results = interleave_results
 
         if bing_api_key is None or bing_api_key.strip() == "":
@@ -258,8 +257,7 @@ class BingMarkdownSearch(AbstractMarkdownSearch):
         url = f"https://www.bing.com/search?q={quote_plus(query)}&FORM=QBLH"
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        # TODO: Fix the types
-        return self._mdconvert.convert_response(response).text_content  # type: ignore
+        return self._mdconvert.convert_response(response).text_content
 
     def _markdown_link(self, anchor: str, href: str) -> str:
         """Create a Markdown hyperlink, escaping the URLs as appropriate.
