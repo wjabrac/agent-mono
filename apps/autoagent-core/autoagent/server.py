@@ -11,14 +11,23 @@ from autoagent.registry import registry
 from autoagent import MetaChain
 from autoagent.types import Agent, Response
 
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN, integrations=[FastApiIntegration()], traces_sample_rate=1.0
+# Optional OpenTelemetry instrumentation
+try:  # pragma: no cover - instrumentation is optional
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import (
+        BatchSpanProcessor,
+        ConsoleSpanExporter,
     )
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    trace.set_tracer_provider(TracerProvider())
+    trace.get_tracer_provider().add_span_processor(
+        BatchSpanProcessor(ConsoleSpanExporter())
+    )
+    _OTEL_ENABLED = True
+except Exception:  # pragma: no cover - missing dependency
+    _OTEL_ENABLED = False
 
 
 # 定义lifespan上下文管理器
@@ -32,6 +41,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MetaChain API", lifespan=lifespan)
+
+if _OTEL_ENABLED:
+    FastAPIInstrumentor().instrument_app(app)
 
 
 class ToolRequest(BaseModel):

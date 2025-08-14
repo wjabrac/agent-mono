@@ -428,13 +428,13 @@ More features coming soon! 🚀 **Web GUI interface** under development.
 
 ### Logging Configuration
 
-AutoAgent uses `LoggerManager` for runtime logging. Configure logging behavior with the following environment variables:
+AutoAgent uses `LoggerManager` for runtime logging and includes optional OpenTelemetry tracing. Configure behavior with the following environment variables:
 
 - `LOG_LEVEL` – `DEBUG`, `INFO`, `WARN`, or `ERROR` (defaults to `INFO`).
 - `JSON_LOGS` – set to `true` to emit structured JSON logs.
 - `DEFAULT_LOG` – write logs to a file when set to `true`.
 - `LOG_PATH` – optional path to the log file when `DEFAULT_LOG` is enabled.
-- `SENTRY_DSN` – when provided, enables Sentry monitoring for the server and workflow components.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` – when provided, OpenTelemetry traces from the server and workflow are sent to the specified collector. Without it, traces are printed to the console.
 
 Example configuration:
 

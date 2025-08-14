@@ -2,12 +2,24 @@ import os
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
-import sentry_sdk
 from temporalio import workflow, activity
 
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
-    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=1.0)
+# Optional OpenTelemetry tracing
+try:  # pragma: no cover - instrumentation is optional
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import (
+        BatchSpanProcessor,
+        ConsoleSpanExporter,
+    )
+
+    trace.set_tracer_provider(TracerProvider())
+    trace.get_tracer_provider().add_span_processor(
+        BatchSpanProcessor(ConsoleSpanExporter())
+    )
+    _TRACER = trace.get_tracer(__name__)
+except Exception:  # pragma: no cover - missing dependency
+    _TRACER = None
 
 
 @dataclass
@@ -31,6 +43,11 @@ def run_steps(inp: AgentWorkflowInput) -> Dict[str, Any]:
 class AgentWorkflow:
     @workflow.run
     async def run(self, inp: AgentWorkflowInput) -> Dict[str, Any]:
+        if _TRACER:
+            with _TRACER.start_as_current_span("AgentWorkflow.run"):
+                return await workflow.execute_activity(
+                    run_steps, inp, schedule_to_close_timeout=timedelta(minutes=10)
+                )
         return await workflow.execute_activity(
             run_steps, inp, schedule_to_close_timeout=timedelta(minutes=10)
         )
