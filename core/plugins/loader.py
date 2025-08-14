@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import importlib.util
 import os
 import sys
@@ -24,11 +25,11 @@ def _load_module(path: str) -> ModuleType:
     """Load a module from ``path`` with an isolated name.
 
     Any previously loaded module under the same generated name is removed from
-    ``sys.modules`` to support hot reloading.
+    ``sys.modules`` and import caches are cleared to support hot reloading.
     """
+    importlib.invalidate_caches()
     mod_name = _module_name(path)
-    if mod_name in sys.modules:
-        del sys.modules[mod_name]
+    sys.modules.pop(mod_name, None)
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load spec for {path}")
