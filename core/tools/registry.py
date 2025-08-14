@@ -3,6 +3,7 @@ from typing import Dict, Any, Callable, Type, List
 from pydantic import BaseModel
 from core.observability.metrics import record_tool_request
 from core.tools.manifest import ensure_tool_entry
+from core.plugins import discover_plugins as _discover_plugins
 
 class ToolSpec(BaseModel):
     name: str
@@ -153,6 +154,7 @@ def discover(package: str = "plugins") -> None:
         _discover_microtools_from_dirs()
         _discover_templates()
         _load_remote_tools_from_config()
+        _discover_plugins()
         global _last_load_ts
         _last_load_ts = time.time()
 
@@ -175,3 +177,4 @@ def reload_if_needed() -> None:
             _log_discovery_error(pkg, e); continue
     _discover_microtools_from_dirs()
     _discover_templates()
+    _discover_plugins()
