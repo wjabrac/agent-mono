@@ -1,9 +1,5 @@
-"""Utilities for loading tool plugins.
+"""Plugin discovery utilities."""
 
-This package provides helpers to discover modules in the top-level
-``plugins`` package and register any `ToolSpec` instances they expose.
-"""
+from .loader import discover_plugins, PluginManifest, load_plugins
 
-from .loader import load_plugins
-
-__all__ = ["load_plugins"]
+__all__ = ["discover_plugins", "PluginManifest", "load_plugins"]
