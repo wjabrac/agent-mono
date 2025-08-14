@@ -13,7 +13,6 @@ from typing import (
 from llama_index.core.bridge.pydantic import BaseModel, Field, ValidationError
 from llama_index.core.callbacks.base import CallbackManager
 from llama_index.core.indices.prompt_helper import PromptHelper
-from llama_index.core.indices.utils import truncate_text
 from llama_index.core.llms import LLM
 from llama_index.core.prompts.base import BasePromptTemplate
 from llama_index.core.prompts.default_prompt_selectors import (
@@ -21,7 +20,6 @@ from llama_index.core.prompts.default_prompt_selectors import (
     DEFAULT_TEXT_QA_PROMPT_SEL,
 )
 from llama_index.core.prompts.mixin import PromptDictType
-from llama_index.core.response.utils import get_response_text, aget_response_text
 from llama_index.core.response_synthesizers.base import BaseSynthesizer
 from llama_index.core.types import RESPONSE_TEXT_TYPE, BasePydanticProgram
 from llama_index.core.instrumentation.events.synthesis import (
@@ -29,6 +27,10 @@ from llama_index.core.instrumentation.events.synthesis import (
     GetResponseStartEvent,
 )
 import llama_index.core.instrumentation as instrument
+from llama_index.core.base.response.schema import (
+    refine_program_loop,
+    arefine_program_loop,
+)
 
 dispatcher = instrument.get_dispatcher(__name__)
 
@@ -280,72 +282,25 @@ class Refine(BaseSynthesizer):
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
         """Refine response."""
-        # TODO: consolidate with logic in response/schema.py
-        if isinstance(response, Generator):
-            response = get_response_text(response)
 
-        fmt_text_chunk = truncate_text(text_chunk, 50)
-        logger.debug(f"> Refine context: {fmt_text_chunk}")
-        if self._verbose:
-            print(f"> Refine context: {fmt_text_chunk}")
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return self._llm.stream(template, context_msg=chunk, **kwargs)
 
-        # NOTE: partial format refine template with query_str and existing_answer here
-        refine_template = self._refine_template.partial_format(
-            query_str=query_str, existing_answer=response
+        return refine_program_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
-
-        # compute available chunk size to see if there is any available space
-        # determine if the refine template is too big (which can happen if
-        # prompt template + query + existing answer is too large)
-        avail_chunk_size = self._prompt_helper._get_available_chunk_size(
-            refine_template
-        )
-
-        if avail_chunk_size < 0:
-            # if the available chunk size is negative, then the refine template
-            # is too big and we just return the original response
-            return response
-
-        # obtain text chunks to add to the refine template
-        text_chunks = self._prompt_helper.repack(
-            refine_template, text_chunks=[text_chunk], llm=self._llm
-        )
-
-        program = self._program_factory(refine_template)
-        for cur_text_chunk in text_chunks:
-            query_satisfied = False
-            if not self._streaming:
-                try:
-                    structured_response = cast(
-                        StructuredRefineResponse,
-                        program(
-                            context_msg=cur_text_chunk,
-                            **response_kwargs,
-                        ),
-                    )
-                    query_satisfied = structured_response.query_satisfied
-                    if query_satisfied:
-                        response = structured_response.answer
-                except ValidationError as e:
-                    logger.warning(
-                        f"Validation error on structured response: {e}", exc_info=True
-                    )
-            else:
-                # TODO: structured response not supported for streaming
-                if isinstance(response, Generator):
-                    response = "".join(response)
-
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-                response = self._llm.stream(
-                    refine_template,
-                    context_msg=cur_text_chunk,
-                    **response_kwargs,
-                )
-
-        return response
 
     @dispatcher.span
     async def aget_response(
@@ -391,80 +346,25 @@ class Refine(BaseSynthesizer):
         **response_kwargs: Any,
     ) -> Optional[RESPONSE_TEXT_TYPE]:
         """Refine response."""
-        # TODO: consolidate with logic in response/schema.py
-        if isinstance(response, AsyncGenerator):
-            response = await aget_response_text(response)
 
-        fmt_text_chunk = truncate_text(text_chunk, 50)
-        logger.debug(f"> Refine context: {fmt_text_chunk}")
+        async def stream_fn(
+            template: BasePromptTemplate, chunk: str, **kwargs: Any
+        ) -> RESPONSE_TEXT_TYPE:
+            return await self._llm.astream(template, context_msg=chunk, **kwargs)
 
-        # NOTE: partial format refine template with query_str and existing_answer here
-        refine_template = self._refine_template.partial_format(
-            query_str=query_str, existing_answer=response
+        return await arefine_program_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=self._program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=self._refine_template,
+            prompt_helper=self._prompt_helper,
+            llm=self._llm,
+            streaming=self._streaming,
+            verbose=self._verbose,
+            response_kwargs=response_kwargs,
         )
-
-        # compute available chunk size to see if there is any available space
-        # determine if the refine template is too big (which can happen if
-        # prompt template + query + existing answer is too large)
-        avail_chunk_size = self._prompt_helper._get_available_chunk_size(
-            refine_template
-        )
-
-        if avail_chunk_size < 0:
-            # if the available chunk size is negative, then the refine template
-            # is too big and we just return the original response
-            return response
-
-        # obtain text chunks to add to the refine template
-        text_chunks = self._prompt_helper.repack(
-            refine_template, text_chunks=[text_chunk], llm=self._llm
-        )
-
-        program = self._program_factory(refine_template)
-        for cur_text_chunk in text_chunks:
-            query_satisfied = False
-            if not self._streaming:
-                try:
-                    structured_response = await program.acall(
-                        context_msg=cur_text_chunk,
-                        **response_kwargs,
-                    )
-                    structured_response = cast(
-                        StructuredRefineResponse, structured_response
-                    )
-                    query_satisfied = structured_response.query_satisfied
-                    if query_satisfied:
-                        response = structured_response.answer
-                except ValidationError as e:
-                    logger.warning(
-                        f"Validation error on structured response: {e}", exc_info=True
-                    )
-            else:
-                if isinstance(response, Generator):
-                    response = "".join(response)
-
-                if isinstance(response, AsyncGenerator):
-                    _r = ""
-                    async for text in response:
-                        _r += text
-                    response = _r
-
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-                response = await self._llm.astream(
-                    refine_template,
-                    context_msg=cur_text_chunk,
-                    **response_kwargs,
-                )
-
-            if query_satisfied:
-                refine_template = self._refine_template.partial_format(
-                    query_str=query_str, existing_answer=response
-                )
-
-        return response
 
     async def _agive_response_single(
         self,

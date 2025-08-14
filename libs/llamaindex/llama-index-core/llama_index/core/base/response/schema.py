@@ -1,14 +1,40 @@
 """Response schema."""
 
+from __future__ import annotations
+
 import asyncio
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Callable,
+    Awaitable,
+    Generator,
+    AsyncGenerator,
+    TYPE_CHECKING,
+)
 
 from llama_index.core.async_utils import asyncio_run
-from llama_index.core.bridge.pydantic import BaseModel
+from llama_index.core.bridge.pydantic import BaseModel, ValidationError
 from llama_index.core.schema import NodeWithScore
-from llama_index.core.types import TokenGen, TokenAsyncGen
+from llama_index.core.types import (
+    TokenGen,
+    TokenAsyncGen,
+    RESPONSE_TEXT_TYPE,
+    BasePydanticProgram,
+)
 from llama_index.core.utils import truncate_text
+
+if TYPE_CHECKING:
+    from llama_index.core.indices.prompt_helper import PromptHelper
+    from llama_index.core.llms import LLM
+    from llama_index.core.prompts.base import BasePromptTemplate
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -234,6 +260,140 @@ class AsyncStreamingResponse:
             source_text = f"> Source (Node id: {node_id}): {fmt_text_chunk}"
             texts.append(source_text)
         return "\n\n".join(texts)
+
+
+async def _refinement_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Shared refinement loop used by Refine synthesizers."""
+    from llama_index.core.response.utils import get_response_text, aget_response_text
+
+    if isinstance(response, Generator):
+        response = get_response_text(response)
+    if isinstance(response, AsyncGenerator):
+        response = await aget_response_text(response)
+
+    fmt_text_chunk = truncate_text(text_chunk, 50)
+    logger.debug(f"> Refine context: {fmt_text_chunk}")
+    if verbose:
+        print(f"> Refine context: {fmt_text_chunk}")
+
+    refine_template = base_refine_template.partial_format(
+        query_str=query_str, existing_answer=response
+    )
+
+    avail_chunk_size = prompt_helper._get_available_chunk_size(refine_template)
+    if avail_chunk_size < 0:
+        return response
+
+    text_chunks = prompt_helper.repack(
+        refine_template, text_chunks=[text_chunk], llm=llm
+    )
+
+    program = program_factory(refine_template)
+    for cur_text_chunk in text_chunks:
+        query_satisfied = False
+        if not streaming:
+            try:
+                structured_response = await program.acall(
+                    context_msg=cur_text_chunk, **response_kwargs
+                )
+                query_satisfied = getattr(structured_response, "query_satisfied", False)
+                if query_satisfied:
+                    response = getattr(structured_response, "answer", response)
+            except ValidationError as e:
+                logger.warning(
+                    f"Validation error on structured response: {e}", exc_info=True
+                )
+        else:
+            if isinstance(response, Generator):
+                response = get_response_text(response)
+            if isinstance(response, AsyncGenerator):
+                response = await aget_response_text(response)
+            refine_template = base_refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+            response = await stream_fn(
+                refine_template, cur_text_chunk, **response_kwargs
+            )
+        if query_satisfied:
+            refine_template = base_refine_template.partial_format(
+                query_str=query_str, existing_answer=response
+            )
+    return response
+
+
+def refine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Synchronous wrapper for :func:`_refinement_loop`."""
+    return asyncio_run(
+        _refinement_loop(
+            response,
+            query_str,
+            text_chunk,
+            program_factory=program_factory,
+            stream_fn=stream_fn,
+            base_refine_template=base_refine_template,
+            prompt_helper=prompt_helper,
+            llm=llm,
+            streaming=streaming,
+            verbose=verbose,
+            response_kwargs=response_kwargs,
+        )
+    )
+
+
+async def arefine_program_loop(
+    response: RESPONSE_TEXT_TYPE,
+    query_str: str,
+    text_chunk: str,
+    *,
+    program_factory: Callable[[BasePromptTemplate], BasePydanticProgram],
+    stream_fn: Callable[[BasePromptTemplate, str, Any], Awaitable[RESPONSE_TEXT_TYPE]],
+    base_refine_template: BasePromptTemplate,
+    prompt_helper: PromptHelper,
+    llm: LLM,
+    streaming: bool,
+    verbose: bool,
+    response_kwargs: Dict[str, Any],
+) -> RESPONSE_TEXT_TYPE:
+    """Async wrapper for :func:`_refinement_loop`."""
+    return await _refinement_loop(
+        response,
+        query_str,
+        text_chunk,
+        program_factory=program_factory,
+        stream_fn=stream_fn,
+        base_refine_template=base_refine_template,
+        prompt_helper=prompt_helper,
+        llm=llm,
+        streaming=streaming,
+        verbose=verbose,
+        response_kwargs=response_kwargs,
+    )
 
 
 RESPONSE_TYPE = Union[
