@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import os
-from core.agentControl import execute_steps
+from core.agentControl import execute_steps, plan_steps
 from core.observability.insights import compute_insights
 app = FastAPI(title="autoagent-core")
 class StepModel(BaseModel):
@@ -22,6 +22,23 @@ def health():
 @app.get("/insights")
 def insights():
 	return compute_insights()
+@app.get("/tools")
+def list_tools():
+	from core.tools.registry import _REGISTRY  # type: ignore
+	return sorted(list(_REGISTRY.keys()))
+@app.post("/plan")
+def plan(body: Dict[str, Any]):
+	prompt = body.get("prompt", "")
+	return {"steps": plan_steps(prompt)}
+@app.post("/approve")
+def approve():
+	# replace flag-file based approval; create token so HITL gate lifts
+	token = os.getenv("HITL_TOKEN", "hitl.ok")	
+	path = os.path.join(os.getenv("LOCAL_ROOT","."), token)
+	os.makedirs(os.path.dirname(path), exist_ok=True)
+	with open(path, "w", encoding="utf-8") as f:
+		f.write("ok")
+	return {"ok": True}
 @app.post("/run")
 def run_agent(req: RunModel, thread: str | None = Query(default=None), tags: List[str] | None = Query(default=None)):
 	steps = None if req.steps is None else [s.dict() for s in req.steps]
