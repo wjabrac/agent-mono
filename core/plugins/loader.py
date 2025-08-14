@@ -46,6 +46,15 @@ def load_plugin(entry_path: str) -> None:
             register(obj)
 
 
+def load_plugins_from_dir(directory: str, entry: str = "entry.py") -> None:
+    """Load plugins from a single directory.
+
+    This is a convenience wrapper around :func:`load_plugins_from_dirs` for the
+    common case where only one plugin directory needs to be scanned.
+    """
+    load_plugins_from_dirs([directory], entry)
+
+
 def load_plugins_from_dirs(dirs: Iterable[str], entry: str = "entry.py") -> None:
     """Load plugins from a collection of directories.
 

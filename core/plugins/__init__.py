@@ -1,3 +1,12 @@
 """Plugin loading utilities."""
-from .loader import load_plugin, load_plugins_from_dirs
-__all__ = ["load_plugin", "load_plugins_from_dirs"]
+from .loader import (
+    load_plugin,
+    load_plugins_from_dir,
+    load_plugins_from_dirs,
+)
+
+__all__ = [
+    "load_plugin",
+    "load_plugins_from_dir",
+    "load_plugins_from_dirs",
+]
