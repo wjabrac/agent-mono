@@ -13,6 +13,14 @@ DEFAULT_CHUNK_LINES = 40
 DEFAULT_LINES_OVERLAP = 15
 DEFAULT_MAX_CHARS = 1500
 
+LANGUAGE_ALIASES = {
+    "c++": "cpp",
+    "c#": "c_sharp",
+    "f#": "f_sharp",
+    "js": "javascript",
+    "ts": "typescript",
+}
+
 
 class CodeSplitter(TextSplitter):
     """
@@ -22,8 +30,12 @@ class CodeSplitter(TextSplitter):
     https://docs.sweep.dev/blogs/chunking-2m-files
     """
 
-    language: str = Field(
-        description="The programming language of the code being split."
+    language: Optional[str] = Field(
+        default=None,
+        description=(
+            "The programming language of the code being split. If not provided, "
+            "an attempt will be made to automatically detect the language."
+        ),
     )
     chunk_lines: int = Field(
         default=DEFAULT_CHUNK_LINES,
@@ -44,7 +56,7 @@ class CodeSplitter(TextSplitter):
 
     def __init__(
         self,
-        language: str,
+        language: Optional[str] = None,
         chunk_lines: int = DEFAULT_CHUNK_LINES,
         chunk_lines_overlap: int = DEFAULT_LINES_OVERLAP,
         max_chars: int = DEFAULT_MAX_CHARS,
@@ -71,7 +83,7 @@ class CodeSplitter(TextSplitter):
             id_func=id_func,
         )
 
-        if parser is None:
+        if parser is None and language is not None:
             try:
                 import tree_sitter_language_pack  # pants: no-infer-dep
 
@@ -88,7 +100,8 @@ class CodeSplitter(TextSplitter):
                     "for a list of valid languages."
                 )
                 raise
-        if not isinstance(parser, Parser):
+
+        if parser is not None and not isinstance(parser, Parser):
             raise ValueError("Parser must be a tree-sitter Parser object.")
 
         self._parser = parser
@@ -96,7 +109,7 @@ class CodeSplitter(TextSplitter):
     @classmethod
     def from_defaults(
         cls,
-        language: str,
+        language: Optional[str] = None,
         chunk_lines: int = DEFAULT_CHUNK_LINES,
         chunk_lines_overlap: int = DEFAULT_LINES_OVERLAP,
         max_chars: int = DEFAULT_MAX_CHARS,
@@ -116,6 +129,24 @@ class CodeSplitter(TextSplitter):
     @classmethod
     def class_name(cls) -> str:
         return "CodeSplitter"
+
+    def _detect_language(self, text: str) -> str:
+        """Detect the programming language of ``text``."""
+        try:
+            from guesslang import Guess  # type: ignore
+
+            guess = Guess()
+            language = guess.language_name(text)
+        except Exception:
+            try:
+                from pygments.lexers import guess_lexer  # type: ignore
+
+                language = guess_lexer(text).name
+            except Exception as exc:
+                raise ValueError(
+                    "Could not automatically detect the programming language."
+                ) from exc
+        return LANGUAGE_ALIASES.get(language.lower(), language.lower())
 
     def _chunk_node(self, node: Any, text_bytes: bytes, last_end: int = 0) -> List[str]:
         """
@@ -174,6 +205,24 @@ class CodeSplitter(TextSplitter):
             CBEventType.CHUNKING, payload={EventPayload.CHUNKS: [text]}
         ) as event:
             text_bytes = bytes(text, "utf-8")
+            if self._parser is None:
+                if self.language is None:
+                    self.language = self._detect_language(text)
+                try:
+                    import tree_sitter_language_pack  # pants: no-infer-dep
+
+                    self._parser = tree_sitter_language_pack.get_parser(self.language)  # type: ignore
+                except ImportError:
+                    raise ImportError(
+                        "Please install tree_sitter_language_pack to use CodeSplitter."
+                    )
+                except Exception:
+                    print(
+                        f"Could not get parser for language {self.language}. Check "
+                        "https://github.com/Goldziher/tree-sitter-language-pack?tab=readme-ov-file#available-languages "
+                        "for a list of valid languages."
+                    )
+                    raise
             tree = self._parser.parse(text_bytes)
 
             if (
@@ -191,5 +240,3 @@ class CodeSplitter(TextSplitter):
                 return chunks
             else:
                 raise ValueError(f"Could not parse code with language {self.language}.")
-
-        # TODO: set up auto-language detection using something like https://github.com/yoeo/guesslang.
