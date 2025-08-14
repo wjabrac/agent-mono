@@ -516,6 +516,29 @@ class RedisVectorStore(BasePydanticVectorStore):
                 f"Filter operator {filter.operator} not supported for {field.name} of type {field.type}"
             )
 
+        # Handle list-based IN/NIN operations by composing individual expressions
+        if filter.operator in [FilterOperator.IN, FilterOperator.NIN] and isinstance(
+            filter.value, (list, set, tuple)
+        ):
+            op_key = "==" if filter.operator == FilterOperator.IN else "!="
+            combine = (
+                lambda a, b: a | b
+                if filter.operator == FilterOperator.IN
+                else a & b
+            )
+            expressions = [
+                field_info["operators"][op_key](
+                    field_info["class"](field.name), val
+                )
+                for val in filter.value
+            ]
+            if not expressions:
+                return FilterExpression("*")
+            redis_filter = expressions[0]
+            for expr in expressions[1:]:
+                redis_filter = combine(redis_filter, expr)
+            return redis_filter
+
         # Create field instance and apply the operator function
         field_instance = field_info["class"](field.name)
         return field_info["operators"][filter.operator](field_instance, filter.value)
