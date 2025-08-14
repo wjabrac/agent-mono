@@ -1,7 +1,8 @@
-import importlib, pkgutil, inspect, os, json, time, threading
+import importlib, pkgutil, inspect, os, json, time, threading, sys, types
 from typing import Dict, Any, Callable, Type, List
 from pydantic import BaseModel
 from core.observability.trace import log_event
+from core.tools.manifest import ensure_tool_entry
 
 class ToolSpec(BaseModel):
     name: str
@@ -12,6 +13,7 @@ _REGISTRY: Dict[str, ToolSpec] = {}
 _DISCOVERED_PACKAGES: List[str] = []
 _HOT_RELOAD = os.getenv("TOOL_HOT_RELOAD", "false").lower() in ("1","true","yes")
 _REMOTE_CONFIG_PATH = os.getenv("REMOTE_TOOLS_CONFIG", "")
+_MICROTOOL_DIRS = [p for p in os.getenv("MICROTOOL_DIRS", "tools").split(":") if p]
 _last_load_ts = 0.0
 _lock = threading.Lock()
 
@@ -52,6 +54,39 @@ def _do_discover(package: str) -> None:
                 register(obj)
 
 
+def _discover_microtools_from_dirs() -> None:
+    # Discover any python files in configured directories and import them.
+    for root in _MICROTOOL_DIRS:
+        if not root:
+            continue
+        if not os.path.isdir(root):
+            continue
+        sys.path.insert(0, os.path.abspath("."))
+        for fname in os.listdir(root):
+            if not fname.endswith(".py") or fname.startswith("_"):
+                continue
+            mod_path = os.path.splitext(fname)[0]
+            full_mod = f"{root.replace('/', '.').strip('.')}.{mod_path}" if root != "." else mod_path
+            try:
+                mod = importlib.import_module(full_mod)
+            except Exception:
+                continue
+            # Identify functions decorated with @microtool
+            for _, fn in inspect.getmembers(mod, inspect.isfunction):
+                mt = getattr(fn, "_microtool_spec", None)
+                if mt is None:
+                    continue
+                try:
+                    from core.tools.microtool import build_toolspec_from_microtool
+                    spec = build_toolspec_from_microtool(fn)
+                    register(spec)
+                    # update manifest path
+                    file_path = os.path.join(root, fname)
+                    ensure_tool_entry(mt.name, path=file_path, tags=mt.tags, composite_of=[], description=mt.description)
+                except Exception:
+                    continue
+
+
 def discover(package: str = "plugins") -> None:
     # optional: auto-load MCP adapter
     if os.getenv("ENABLE_MCP", "true").lower() in ("1","true","yes"):
@@ -60,8 +95,10 @@ def discover(package: str = "plugins") -> None:
         except Exception:
             pass
     with _lock:
-        _do_discover(package)
-        _DISCOVERED_PACKAGES.append(package)
+        if package:
+            _do_discover(package)
+            _DISCOVERED_PACKAGES.append(package)
+        _discover_microtools_from_dirs()
         _load_remote_tools_from_config()
         global _last_load_ts
         _last_load_ts = time.time()
@@ -78,9 +115,10 @@ def reload_if_needed() -> None:
     if mtime and mtime > _last_load_ts:
         with _lock:
             _load_remote_tools_from_config(); _last_load_ts = time.time()
-    # Re-import plugin modules to support hot plugging (best-effort)
+    # Re-import plugin modules and microtool modules
     for pkg in list(set(_DISCOVERED_PACKAGES)):
         try:
             _do_discover(pkg)
         except Exception:
             continue
+    _discover_microtools_from_dirs()

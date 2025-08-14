@@ -7,6 +7,13 @@ from core.observability.metrics import tool_calls_total, tool_latency_ms, tool_s
 from core.memory.db import cache_get, cache_put
 import time, os, json, hashlib, concurrent.futures, threading
 
+# Manifest usage tracking
+try:
+	from core.tools.manifest import register_usage as register_usage_metric  # type: ignore
+except Exception:
+	def register_usage_metric(name: str, success: bool = True, tags=None, path: str = "", description: str = ""):
+		return
+
 # Discover all plugins
 discover("plugins")
 
@@ -129,6 +136,10 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                     cache_put(step.tool, cache_key, json.dumps(res), ttl_s=step.ttl_s)
                 except Exception:
                     pass
+            try:
+                register_usage_metric(step.tool, success=True)
+            except Exception:
+                pass
             return {"tool": step.tool, "output": res}
         except Exception as e:
             last_err = e
@@ -145,9 +156,17 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                 res = fut.result(timeout=step.timeout_s)
             log_event(trace_id, "decision", "executor:fallback", {"from": step.tool, "to": fb})
             tool_calls_total.labels(fb, "true").inc()
+            try:
+                register_usage_metric(fb, success=True)
+            except Exception:
+                pass
             return {"tool": fb, "output": res}
         except Exception as e:
             log_event(trace_id, "decision", "executor:fallback_error", {"from": step.tool, "to": fb, "error": type(e).__name__})
+    try:
+        register_usage_metric(step.tool, success=False)
+    except Exception:
+        pass
     raise last_err or RuntimeError("tool_failed")
 
 # --------------- DAG / parallel scheduling ---------------
