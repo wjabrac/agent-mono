@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from typing import Dict, Optional
 
-from .providers import BaseLLMProvider, LocalHFProvider, OpenAIProvider
+from .providers import BaseLLMProvider, LocalHFProvider, OpenAIProvider, GPT4AllProvider
 
 _PROVIDER: Optional[BaseLLMProvider] = None
 
@@ -42,6 +42,8 @@ def get_provider(config: Optional[Dict[str, str]] = None) -> BaseLLMProvider:
         _PROVIDER = OpenAIProvider(model=model)
     elif provider_name.lower() in {"local", "hf", "huggingface"}:
         _PROVIDER = LocalHFProvider(model_name=model)
+    elif provider_name.lower() in {"gpt4all", "gpt4a"}:
+        _PROVIDER = GPT4AllProvider(model_name=model)
     else:  # pragma: no cover - unexpected config
         raise ValueError(f"Unknown LLM provider: {provider_name}")
 
@@ -52,6 +54,7 @@ __all__ = [
     "BaseLLMProvider",
     "OpenAIProvider",
     "LocalHFProvider",
+    "GPT4AllProvider",
     "get_provider",
 ]
 
