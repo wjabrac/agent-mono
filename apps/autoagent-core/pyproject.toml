@@ -1,3 +1,15 @@
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "fastapi",
+    "httpx",
+    "tenacity",
+    "litellm",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["autoagent/tests"]

@@ -2,6 +2,7 @@ import functools, time
 from typing import Callable, Dict, Any
 from core.observability.trace import log_event, start_trace
 from core.trace_context import current_thread_id, current_trace_id, current_tags
+from core.usage_db import log_run
 def instrument_tool(tool_name: str) -> Callable:
     def decorator(fn: Callable[[Dict[str, Any]], Dict[str, Any]]):
         @functools.wraps(fn)
@@ -15,10 +16,19 @@ def instrument_tool(tool_name: str) -> Callable:
             t0 = time.time()
             try:
                 out = fn(args)
-                log_event(trace_id, "decision", "executor:done", {"tool": tool_name, "ms": int((time.time()-t0)*1000), "ok": True, "tags": tags})
+                elapsed = int((time.time() - t0) * 1000)
+                log_event(trace_id, "decision", "executor:done", {"tool": tool_name, "ms": elapsed, "ok": True, "tags": tags})
+                log_run(tool_name, 0, elapsed, None)
                 return out
             except Exception as e:
-                log_event(trace_id, "decision", "executor:error", {"tool": tool_name, "ms": int((time.time()-t0)*1000), "ok": False, "error": type(e).__name__, "msg": str(e), "tags": tags})
+                elapsed = int((time.time() - t0) * 1000)
+                log_event(
+                    trace_id,
+                    "decision",
+                    "executor:error",
+                    {"tool": tool_name, "ms": elapsed, "ok": False, "error": type(e).__name__, "msg": str(e), "tags": tags},
+                )
+                log_run(tool_name, 1, elapsed, f"{type(e).__name__}: {e}")
                 raise
         return wrapper
     return decorator
