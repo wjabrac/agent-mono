@@ -58,12 +58,14 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_HOST=http://ollama:11434
       - TEMPORAL_HOST=temporal:7233
+      - PORT=8080
     volumes:
       - ../apps/autoagent-core:/app
       - ../core:/core
       - ../plugins:/plugins
       - ../data:/data
     ports: ["8080:8080"]
+    command: bash -lc "pip install -e . && uvicorn app.main:app --host 0.0.0.0 --port 8080"
 
   temporal-worker:
     build: ../services/temporal-worker

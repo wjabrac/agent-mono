@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Response
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import os
@@ -17,7 +17,6 @@ def health():
 @app.get("/metrics")
 def metrics():
     return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)  # type: ignore
-from fastapi import Response
 @app.post("/run")
 def run_agent(req: RunModel, thread: str | None = Query(default=None), tags: List[str] | None = Query(default=None)):
     return execute_steps(req.prompt, [s.dict() for s in req.steps], thread_id=thread, tags=tags or [])
@@ -36,10 +35,15 @@ async def run_async(req: RunModel, thread: str | None = Query(default=None), tag
     client = await Client.connect(target)
     wid = f"agent-{thread or 'default'}"
     from services.temporal_worker.workflow import AgentWorkflow  # type: ignore
+    inp = AgentWorkflowInput(prompt=req.prompt, steps=[s.dict() for s in req.steps], thread=thread, tags=tags or [])
     handle = await client.start_workflow(
         AgentWorkflow.run,
-        AgentWorkflowInput(prompt=req.prompt, steps=[s.dict() for s in req.steps], thread=thread, tags=tags or []),
+        inp,
         id=wid,
         task_queue="agent-tq",
     )
     return {"workflow_id": handle.id, "run_id": handle.run_id}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8080")))

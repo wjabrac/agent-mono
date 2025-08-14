@@ -45,7 +45,14 @@ def get_architecture():
 if BASE_IMAGES is None:
     BASE_IMAGES = get_architecture()
 
-COMPLETION_MODEL = os.getenv('COMPLETION_MODEL', "claude-3-5-sonnet-20241022")
+# Use Ollama by default if available and no explicit COMPLETION_MODEL
+_OLLAMA_DEFAULT = "ollama/llama3.1:8b"
+if os.getenv('COMPLETION_MODEL'):
+    COMPLETION_MODEL = os.getenv('COMPLETION_MODEL')
+elif os.getenv('OLLAMA_HOST'):
+    COMPLETION_MODEL = _OLLAMA_DEFAULT
+else:
+    COMPLETION_MODEL = "claude-3-5-sonnet-20241022"
 EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', "text-embedding-3-small")
 
 MC_MODE = str_to_bool(os.getenv('MC_MODE', True))
