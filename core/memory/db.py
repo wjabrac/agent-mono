@@ -1,20 +1,16 @@
-diff --git a/core/memory/db.py b/core/memory/db.py
-index 1111111..2222222 100644
---- a/core/memory/db.py
-+++ b/core/memory/db.py
-@@ -1,3 +1,4 @@
--import os, sqlite3, time, uuid
-+import os
-+import sqlite3
-+import time
-+import uuid
-@@
- DB_PATH = os.getenv("AGENT_DB", "data/agent_memory.sqlite")
- MEM_DDL = [
-@@
--<<<<<<< codex/add-advanced-agent-behaviors-and-rag-capabilities-90zrt3
--"""CREATE TABLE IF NOT EXISTS memory_messages(
-+    """CREATE TABLE IF NOT EXISTS memory_messages(
+import os
+import sqlite3
+import time
+import uuid
+from typing import List, Tuple, Dict, Optional
+
+
+def _db_path() -> str:
+    return os.getenv("AGENT_DB", "data/agent_memory.sqlite")
+
+
+MEM_DDL = [
+    """CREATE TABLE IF NOT EXISTS memory_messages(
    id TEXT PRIMARY KEY,
    thread_id TEXT,
    sender TEXT,
@@ -22,98 +18,117 @@ index 1111111..2222222 100644
    content TEXT,
    created_at INTEGER DEFAULT (strftime('%s','now'))
  );""",
--# new cache table
--"""CREATE TABLE IF NOT EXISTS tool_cache(
--=======
--    # new cache table
--    """CREATE TABLE IF NOT EXISTS tool_cache(
-->>>>>>> main
-+    # new cache table
-+    """CREATE TABLE IF NOT EXISTS tool_cache(
+    """CREATE TABLE IF NOT EXISTS tool_cache(
    cache_key TEXT PRIMARY KEY,
    tool TEXT NOT NULL,
    args_hash TEXT NOT NULL,
-@@
- def get_conn():
-     conn = sqlite3.connect(DB_PATH)
-     conn.execute("PRAGMA journal_mode=WAL;")
-     return conn
-@@
- def init():
-     with get_conn() as c:
-         for ddl in MEM_DDL:
-             c.execute(ddl)
-@@
--def kv_recent(thread_id: str | None, limit: int = 20) -> list[tuple[str, str, int]]:
--<<<<<<< codex/add-advanced-agent-behaviors-and-rag-capabilities-90zrt3
--	if not thread_id:
--		return []
--	with get_conn() as c:
--		rows = c.execute(
--			"SELECT key, value, created_at FROM session_kv WHERE thread_id=? ORDER BY created_at DESC LIMIT ?",
--			(thread_id, limit)
--                ).fetchall()
--	return [(r[0], r[1], int(r[2])) for r in rows]
-+def kv_recent(thread_id: str | None, limit: int = 20) -> list[tuple[str, str, int]]:
-+    if not thread_id:
-+        return []
-+    with get_conn() as c:
-+        rows = c.execute(
-+            "SELECT key, value, created_at FROM session_kv WHERE thread_id=? ORDER BY created_at DESC LIMIT ?",
-+            (thread_id, limit),
-+        ).fetchall()
-+    return [(r[0], r[1], int(r[2])) for r in rows]
-@@
--# Simple messaging helpers
--
--def save_message(thread_id: str, sender: str, recipient: str, content: str) -> None:
--	with get_conn() as c:
--		c.execute(
--			"INSERT INTO memory_messages(id, thread_id, sender, recipient, content) VALUES(?,?,?,?,?)",
--			(uuid.uuid4().hex, thread_id, sender, recipient, content),
--		)
--
--
--def fetch_messages(thread_id: str, recipient: str) -> list[dict[str, str | int]]:
--	with get_conn() as c:
--		rows = c.execute(
--			"SELECT id, sender, recipient, content, created_at FROM memory_messages WHERE thread_id=? AND recipient=? ORDER BY created_at",
--			(thread_id, recipient),
--		).fetchall()
--	return [
--		{
--			"id": r[0],
--			"sender": r[1],
--			"recipient": r[2],
--			"content": r[3],
--			"created_at": int(r[4]),
--		}
--		for r in rows
--	]
-+# Simple messaging helpers
-+def save_message(thread_id: str, sender: str, recipient: str, content: str) -> None:
-+    with get_conn() as c:
-+        c.execute(
-+            "INSERT INTO memory_messages(id, thread_id, sender, recipient, content) VALUES(?,?,?,?,?)",
-+            (uuid.uuid4().hex, thread_id, sender, recipient, content),
-+        )
-+
-+
-+def fetch_messages(thread_id: str, recipient: str) -> list[dict[str, str | int]]:
-+    with get_conn() as c:
-+        rows = c.execute(
-+            "SELECT id, sender, recipient, content, created_at "
-+            "FROM memory_messages WHERE thread_id=? AND recipient=? ORDER BY created_at",
-+            (thread_id, recipient),
-+        ).fetchall()
-+    return [
-+        {
-+            "id": r[0],
-+            "sender": r[1],
-+            "recipient": r[2],
-+            "content": r[3],
-+            "created_at": int(r[4]),
-+        }
-+        for r in rows
-+    ]
+   result TEXT,
+   created_at INTEGER DEFAULT (strftime('%s','now'))
+ );""",
+    """CREATE TABLE IF NOT EXISTS session_kv(
+   thread_id TEXT,
+   key TEXT,
+   value TEXT,
+   created_at INTEGER DEFAULT (strftime('%s','now')),
+   PRIMARY KEY (thread_id, key)
+);""",
+    """CREATE TABLE IF NOT EXISTS memory_threads(
+   id TEXT PRIMARY KEY,
+   title TEXT,
+   created_at INTEGER DEFAULT (strftime('%s','now'))
+ );""",
+    """CREATE TABLE IF NOT EXISTS traces(
+   id TEXT PRIMARY KEY,
+   thread_id TEXT,
+   created_at INTEGER DEFAULT (strftime('%s','now'))
+ );""",
+    """CREATE TABLE IF NOT EXISTS trace_events(
+   id TEXT PRIMARY KEY,
+   trace_id TEXT NOT NULL,
+   phase TEXT,
+   role TEXT,
+   payload TEXT,
+   created_at INTEGER DEFAULT (strftime('%s','now'))
+ );""",
+]
 
+
+def get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(_db_path())
+    conn.execute("PRAGMA journal_mode=WAL;")
+    return conn
+
+
+def init() -> None:
+    with get_conn() as c:
+        for ddl in MEM_DDL:
+            c.execute(ddl)
+
+
+def cache_put(tool: str, args_hash: str, result: str) -> None:
+    key = f"{tool}:{args_hash}"
+    with get_conn() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO tool_cache(cache_key, tool, args_hash, result, created_at) "
+            "VALUES(?,?,?,?,?)",
+            (key, tool, args_hash, result, int(time.time())),
+        )
+
+
+def cache_get(tool: str, args_hash: str) -> Optional[str]:
+    key = f"{tool}:{args_hash}"
+    with get_conn() as c:
+        row = c.execute(
+            "SELECT result FROM tool_cache WHERE cache_key=?",
+            (key,),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def kv_put(thread_id: str, key: str, value: str) -> None:
+    with get_conn() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO session_kv(thread_id, key, value, created_at) "
+            "VALUES(?,?,?,?)",
+            (thread_id, key, value, int(time.time())),
+        )
+
+
+def kv_recent(thread_id: Optional[str], limit: int = 20) -> List[Tuple[str, str, int]]:
+    if not thread_id:
+        return []
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT key, value, created_at FROM session_kv "
+            "WHERE thread_id=? ORDER BY created_at DESC LIMIT ?",
+            (thread_id, limit),
+        ).fetchall()
+    return [(r[0], r[1], int(r[2])) for r in rows]
+
+
+def save_message(thread_id: str, sender: str, recipient: str, content: str) -> None:
+    with get_conn() as c:
+        c.execute(
+            "INSERT INTO memory_messages(id, thread_id, sender, recipient, content) "
+            "VALUES(?,?,?,?,?)",
+            (uuid.uuid4().hex, thread_id, sender, recipient, content),
+        )
+
+
+def fetch_messages(thread_id: str, recipient: str) -> List[Dict[str, str | int]]:
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT id, sender, recipient, content, created_at "
+            "FROM memory_messages WHERE thread_id=? AND recipient=? ORDER BY created_at",
+            (thread_id, recipient),
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "sender": r[1],
+            "recipient": r[2],
+            "content": r[3],
+            "created_at": int(r[4]),
+        }
+        for r in rows
+    ]
