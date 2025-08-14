@@ -1,53 +1,49 @@
-"""Thread-safe in-process metrics helpers.
+from typing import Dict, Tuple
 
-This module wraps ``prometheus_client`` metrics with lightweight data
-structures that keep an in-memory snapshot of metric values.  The snapshot can
-be exported as JSON-serialisable data and reset between tests or runs.
+class _LabelledCounter:
+	def __init__(self, store: Dict[Tuple[str, ...], int], label_values: Tuple[str, ...]):
+		self._store = store
+		self._label_values = label_values
+	def inc(self, amount: int = 1) -> None:
+		self._store[self._label_values] = self._store.get(self._label_values, 0) + amount
 
-Two metrics are exposed:
+class _LabelledHistogram:
+	def __init__(self, store: Dict[Tuple[str, ...], list], label_values: Tuple[str, ...]):
+		self._store = store
+		self._label_values = label_values
+	def observe(self, value: float) -> None:
+		self._store.setdefault(self._label_values, []).append(value)
 
-``tool_calls_total``
-    Counter tracking the number of tool invocations labelled by tool name and
-    success flag.
+class Counter:
+	def __init__(self, name: str, description: str, labels: list[str]):
+		self._name = name
+		self._description = description
+		self._labels = labels
+		self._data: Dict[Tuple[str, ...], int] = {}
+	def labels(self, *label_values: str) -> _LabelledCounter:
+		return _LabelledCounter(self._data, tuple(label_values))
 
-``tool_latency_ms``
-    Histogram storing the latency of tool invocations in milliseconds labelled
-    by tool name.
+class Histogram:
+	def __init__(self, name: str, description: str, labels: list[str]):
+		self._name = name
+		self._description = description
+		self._labels = labels
+		self._data: Dict[Tuple[str, ...], list] = {}
+	def labels(self, *label_values: str) -> _LabelledHistogram:
+		return _LabelledHistogram(self._data, tuple(label_values))
 
-The helpers are intentionally minimal and only implement the parts of the
-Prometheus API that are currently used within the code base.
-"""
+# Lightweight local telemetry stores
+# Access the raw data if needed via these objects' _data attributes
 
-from __future__ import annotations
-
-from collections import Counter as CounterDict, defaultdict
-import threading
-from typing import Any, Dict, List, Tuple
-
-from prometheus_client import Counter, Histogram
-from core.tools import registry
-
-tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool", "ok"])
+tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool","ok"])
 tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool"])
+tool_skipped_total = Counter("tool_skipped_total", "Tool skipped", ["tool","reason"])
 
-tool_requests_total = Counter(
-    "tool_requests_total", "Tool requests", ["tool", "found"]
-)
+# Additional request-level metric for lookups
 
+tool_requests_total = Counter("tool_requests_total", "Tool requests", ["tool","found"])
 
-def record_tool_request(tool_name: str) -> None:
-    """Record that a tool was requested.
-
-    Increments the ``tool_requests_total`` counter with ``found`` set to
-    ``"true"`` when the tool exists in the registry or ``"false"`` when the
-    registry lookup raises ``KeyError``. The ``KeyError`` is re-raised so the
-    caller can handle the missing tool case.
-    """
-
-    try:
-        registry.get(tool_name)
-    except KeyError:
-        tool_requests_total.labels(tool=tool_name, found="false").inc()
-        raise
-    else:
-        tool_requests_total.labels(tool=tool_name, found="true").inc()
+def record_tool_request(tool_name: str, found: str) -> None:
+	# found must be "true" or "false"
+	val = "true" if str(found).lower() in ("1","true","yes") or found == True else "false"  # type: ignore
+	ool_requests_total.labels(tool_name, val).inc()
