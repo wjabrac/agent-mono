@@ -1,13 +1,14 @@
-import importlib, pkgutil, inspect, os, json, time, threading, sys
-from typing import Dict, Any, Callable, Type, List
+import importlib, pkgutil, inspect, os, json, time, threading, sys, warnings
+from typing import Dict, Any, Callable, Type, List, Awaitable
 from pydantic import BaseModel
 from core.observability.metrics import record_tool_request
 from core.tools.manifest import ensure_tool_entry
+from core.plugins import discover_plugins as _discover_plugins
 
 class ToolSpec(BaseModel):
     name: str
     input_model: Type[BaseModel] | None = None
-    run: Callable[[Dict[str, Any]], Dict[str, Any]] | Callable[..., Any]
+    run: Callable[[Dict[str, Any]], Dict[str, Any] | Awaitable[Dict[str, Any]]]
 
 _REGISTRY: Dict[str, ToolSpec] = {}
 _DISCOVERED_PACKAGES: List[str] = []
@@ -19,6 +20,8 @@ _lock = threading.Lock()
 
 
 def register(tool: ToolSpec) -> None:
+    if tool.name in _REGISTRY:
+        warnings.warn(f"duplicate tool registration: {tool.name}")
     _REGISTRY[tool.name] = tool
 
 
@@ -45,15 +48,21 @@ def _load_remote_tools_from_config() -> None:
         return
     try:
         from core.tools.remote import RemoteToolConfig, build_remote_tool
+        from pydantic import ValidationError
         with open(_REMOTE_CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         tools = cfg if isinstance(cfg, list) else cfg.get("tools", [])
         for item in tools:
             try:
-                spec = build_remote_tool(RemoteToolConfig(**item))
-                register(spec)
-            except Exception:
+                cfg_item = RemoteToolConfig(**item)
+            except Exception as e:
+                _log_discovery_error("remote_tool_config_item", e)
                 continue
+            try:
+                spec = build_remote_tool(cfg_item)
+                register(spec)
+            except Exception as e:
+                _log_discovery_error(f"remote_tool:{getattr(cfg_item, 'name', 'unknown')}", e)
     except Exception as e:
         _log_discovery_error("remote_tools_config", e)
 
@@ -153,6 +162,7 @@ def discover(package: str = "plugins") -> None:
         _discover_microtools_from_dirs()
         _discover_templates()
         _load_remote_tools_from_config()
+        _discover_plugins()
         global _last_load_ts
         _last_load_ts = time.time()
 
@@ -175,3 +185,4 @@ def reload_if_needed() -> None:
             _log_discovery_error(pkg, e); continue
     _discover_microtools_from_dirs()
     _discover_templates()
+    _discover_plugins()

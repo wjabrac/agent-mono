@@ -1,13 +1,13 @@
 import os
 import json
-import importlib.util
 import pkgutil
-from importlib import import_module
-import threading
 import inspect
+import threading
+import importlib.util
+from importlib import import_module
 from typing import Dict, Any, List
-from pydantic import BaseModel, ValidationError
 
+from pydantic import BaseModel, ValidationError
 from core.tools.registry import ToolSpec, register
 
 # Track loaded plugin manifests by path -> mtime
@@ -48,7 +48,7 @@ def _register_from_module(module) -> None:
 
 
 def discover_plugins(root: str = "plugins") -> None:
-    """Recursively discover plugin.json manifests under ``root`` and load entry modules."""
+    """Recursively discover plugin.json manifests under root and load entry modules."""
     if not os.path.isdir(root):
         return
     with _lock:
@@ -76,24 +76,13 @@ def discover_plugins(root: str = "plugins") -> None:
                 continue
 
 
-# Backwards-compatible loader for simple ``plugins`` packages
-
+# Backwards-compatible loader for simple "plugins" packages
 def load_plugins(package: str = "plugins") -> List[str]:
-    """Load ToolSpecs from all modules in ``package``.
+    """
+    Load ToolSpecs from all modules in package.
 
-    Each module under ``package`` is imported. If the module defines a
-    top-level variable named ``spec`` that is an instance of ``ToolSpec``,
-    it will be registered with :func:`core.tools.registry.register`.
-
-    Parameters
-    ----------
-    package: str
-        Package name to search. Defaults to ``"plugins"``.
-
-    Returns
-    -------
-    List[str]
-        Names of the tools that were registered.
+    Each module under package is imported. If the module defines a top-level
+    variable named "spec" that is an instance of ToolSpec, it will be registered.
     """
     loaded: List[str] = []
     try:
@@ -105,10 +94,12 @@ def load_plugins(package: str = "plugins") -> List[str]:
         full_name = f"{package}.{modname}"
         try:
             mod = import_module(full_name)
-        except Exception:
+        except Exception as e:
+            _log_error(full_name, e)
             continue
         spec = getattr(mod, "spec", None)
         if isinstance(spec, ToolSpec):
             register(spec)
             loaded.append(spec.name)
     return loaded
+
