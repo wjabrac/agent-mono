@@ -1,66 +1,103 @@
+"""Lightweight in-process metrics helpers.
 
-"""Lightweight in-memory metrics with tag support.
+This module provides a very small subset of the Prometheus client API so the
+rest of the codebase can track counters and histograms without depending on the
+real ``prometheus_client`` package or a running Prometheus server.  Metrics are
+stored in simple in-memory dictionaries keyed by the label values.  They are
+primarily useful for debugging or unit tests where quick visibility into counts
+and timings is sufficient.
 
-This module centralizes metric definitions without relying on external
-services. Metrics are stored in dictionaries keyed by tag tuples, allowing
-simple introspection while keeping runtime costs at zero.
+Example::
+
+    calls = Counter("my_calls", "Number of calls", ["name"])
+    calls.labels("foo").inc()
+
+    latency = Histogram("latency_ms", "Latency (ms)", ["name"])
+    latency.labels("foo").observe(123.4)
+
+The ``labels`` call returns a small handle object exposing ``inc`` or
+``observe`` depending on metric type.  Collected values can be inspected via the
+``data`` attribute on each metric instance.
 """
 
+from __future__ import annotations
+
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from dataclasses import dataclass
+from typing import DefaultDict, Dict, Iterable, Tuple, List
+
+
+# ---------------------------------------------------------------------------
+# Metric base classes
+
+
+@dataclass
+class _CounterHandle:
+    _store: DefaultDict[Tuple[str, ...], int]
+    _key: Tuple[str, ...]
+
+    def inc(self, value: int = 1) -> None:
+        self._store[self._key] += value
+
+
+@dataclass
+class _HistogramHandle:
+    _store: DefaultDict[Tuple[str, ...], List[float]]
+    _key: Tuple[str, ...]
+
+    def observe(self, value: float) -> None:
+        self._store[self._key].append(float(value))
 
 
 class Counter:
-    """A minimal counter supporting tag-based increments."""
+    """Minimal counter implementation with label support."""
 
-    def __init__(self, name: str, description: str, label_names: List[str]):
+    def __init__(self, name: str, doc: str, label_names: Iterable[str]):
         self.name = name
-        self.description = description
-        self.label_names = label_names
-        self.values: Dict[Tuple[str, ...], float] = defaultdict(float)
+        self.documentation = doc
+        self.label_names = list(label_names)
+        self.data: DefaultDict[Tuple[str, ...], int] = defaultdict(int)
 
-    def labels(self, *label_values: str):
-        key = tuple(label_values)
-        parent = self
-
-        class _LabeledCounter:
-            def inc(self, amount: float = 1.0) -> None:
-                parent.values[key] += amount
-
-        return _LabeledCounter()
+    def labels(self, *label_values: str) -> _CounterHandle:
+        if len(label_values) != len(self.label_names):
+            raise ValueError("label count mismatch")
+        return _CounterHandle(self.data, tuple(label_values))
 
 
 class Histogram:
-    """A minimal histogram storing count and sum for observations."""
+    """Minimal histogram implementation with label support."""
 
-    def __init__(self, name: str, description: str, label_names: List[str]):
+    def __init__(self, name: str, doc: str, label_names: Iterable[str]):
         self.name = name
-        self.description = description
-        self.label_names = label_names
-        self.values: Dict[Tuple[str, ...], Dict[str, float]] = defaultdict(
-            lambda: {"count": 0, "sum": 0.0}
-        )
+        self.documentation = doc
+        self.label_names = list(label_names)
+        self.data: DefaultDict[Tuple[str, ...], List[float]] = defaultdict(list)
 
-    def labels(self, *label_values: str):
-        key = tuple(label_values)
-        parent = self
-
-        class _LabeledHistogram:
-            def observe(self, value: float) -> None:
-                bucket = parent.values[key]
-                bucket["count"] += 1
-                bucket["sum"] += value
-
-        return _LabeledHistogram()
+    def labels(self, *label_values: str) -> _HistogramHandle:
+        if len(label_values) != len(self.label_names):
+            raise ValueError("label count mismatch")
+        return _HistogramHandle(self.data, tuple(label_values))
 
 
-# Number of times a tool has been invoked along with whether the call succeeded.
+# ---------------------------------------------------------------------------
+# Predefined metrics used throughout the project.  We include a ``tags`` label
+# so metrics can be filtered by high-level tags associated with a given trace or
+# request.
+
+
 tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool", "ok", "tags"])
-
-# Latency of individual tool calls in milliseconds.
 tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool", "tags"])
 
-# Total tokens consumed by each tool. This helps surface budget usage.
-tool_tokens_total = Counter(
-    "tool_tokens_total", "Tokens consumed by tool", ["tool", "tags"]
-)
+llm_calls_total = Counter("llm_calls_total", "LLM generation calls", ["model", "ok", "tags"])
+llm_latency_ms = Histogram("llm_latency_ms", "LLM generation latency (ms)", ["model", "tags"])
+
+
+__all__ = [
+    "Counter",
+    "Histogram",
+    "tool_calls_total",
+    "tool_latency_ms",
+    "llm_calls_total",
+    "llm_latency_ms",
+]
+
