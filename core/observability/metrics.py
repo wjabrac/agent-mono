@@ -1,40 +1,66 @@
-from typing import Dict, Tuple
 
-class _LabelledCounter:
-	def __init__(self, store: Dict[Tuple[str, ...], int], label_values: Tuple[str, ...]):
-		self._store = store
-		self._label_values = label_values
-	def inc(self, amount: int = 1) -> None:
-		self._store[self._label_values] = self._store.get(self._label_values, 0) + amount
+"""Lightweight in-memory metrics with tag support.
 
-class _LabelledHistogram:
-	def __init__(self, store: Dict[Tuple[str, ...], list], label_values: Tuple[str, ...]):
-		self._store = store
-		self._label_values = label_values
-	def observe(self, value: float) -> None:
-		self._store.setdefault(self._label_values, []).append(value)
+This module centralizes metric definitions without relying on external
+services. Metrics are stored in dictionaries keyed by tag tuples, allowing
+simple introspection while keeping runtime costs at zero.
+"""
+
+from collections import defaultdict
+from typing import Dict, List, Tuple
+
 
 class Counter:
-	def __init__(self, name: str, description: str, labels: list[str]):
-		self._name = name
-		self._description = description
-		self._labels = labels
-		self._data: Dict[Tuple[str, ...], int] = {}
-	def labels(self, *label_values: str) -> _LabelledCounter:
-		return _LabelledCounter(self._data, tuple(label_values))
+    """A minimal counter supporting tag-based increments."""
+
+    def __init__(self, name: str, description: str, label_names: List[str]):
+        self.name = name
+        self.description = description
+        self.label_names = label_names
+        self.values: Dict[Tuple[str, ...], float] = defaultdict(float)
+
+    def labels(self, *label_values: str):
+        key = tuple(label_values)
+        parent = self
+
+        class _LabeledCounter:
+            def inc(self, amount: float = 1.0) -> None:
+                parent.values[key] += amount
+
+        return _LabeledCounter()
+
 
 class Histogram:
-	def __init__(self, name: str, description: str, labels: list[str]):
-		self._name = name
-		self._description = description
-		self._labels = labels
-		self._data: Dict[Tuple[str, ...], list] = {}
-	def labels(self, *label_values: str) -> _LabelledHistogram:
-		return _LabelledHistogram(self._data, tuple(label_values))
+    """A minimal histogram storing count and sum for observations."""
 
-# Lightweight local telemetry stores
-# Access the raw data if needed via these objects' _data attributes
+    def __init__(self, name: str, description: str, label_names: List[str]):
+        self.name = name
+        self.description = description
+        self.label_names = label_names
+        self.values: Dict[Tuple[str, ...], Dict[str, float]] = defaultdict(
+            lambda: {"count": 0, "sum": 0.0}
+        )
 
-tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool","ok"])
-tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool"])
-tool_skipped_total = Counter("tool_skipped_total", "Tool skipped", ["tool","reason"])
+    def labels(self, *label_values: str):
+        key = tuple(label_values)
+        parent = self
+
+        class _LabeledHistogram:
+            def observe(self, value: float) -> None:
+                bucket = parent.values[key]
+                bucket["count"] += 1
+                bucket["sum"] += value
+
+        return _LabeledHistogram()
+
+
+# Number of times a tool has been invoked along with whether the call succeeded.
+tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool", "ok", "tags"])
+
+# Latency of individual tool calls in milliseconds.
+tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool", "tags"])
+
+# Total tokens consumed by each tool. This helps surface budget usage.
+tool_tokens_total = Counter(
+    "tool_tokens_total", "Tokens consumed by tool", ["tool", "tags"]
+)
