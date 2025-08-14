@@ -6,6 +6,7 @@ import mimetypes
 import os
 import pathlib
 import re
+import sys
 import time
 import traceback
 import uuid
@@ -18,8 +19,19 @@ import requests
 from .abstract_markdown_browser import AbstractMarkdownBrowser
 from .markdown_search import AbstractMarkdownSearch, BingMarkdownSearch
 
-# TODO: Fix unfollowed import
-from .mdconvert import FileConversionException, MarkdownConverter, UnsupportedFormatException  # type: ignore
+try:
+    from .mdconvert import (
+        FileConversionException,
+        MarkdownConverter,
+        UnsupportedFormatException,
+    )
+except ImportError:  # pragma: no cover - fallback for script execution
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+    from mdconvert import (
+        FileConversionException,
+        MarkdownConverter,
+        UnsupportedFormatException,
+    )
 
 
 class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
@@ -29,8 +41,7 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
     See AbstractMarkdownBrowser for more details.
     """
 
-    # TODO: Fix unfollowed import
-    def __init__(  # type: ignore
+    def __init__(
         self,
         local_root: str,
         workplace_name: str,
@@ -109,33 +120,55 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         Arguments:
             uri_or_path: The fully-qualified URI to fetch, or the path to fetch from the current location. If the URI protocol is `search:`, the remainder of the URI is interpreted as a search query, and a web search is performed. If the URI protocol is `file://`, the remainder of the URI is interpreted as a local absolute file path.
         """
-        # TODO: Handle anchors
+
         self.history.append((uri_or_path, time.time()))
 
+        parsed_uri = urlparse(uri_or_path)
+        anchor = unquote(parsed_uri.fragment)
+        base_uri = uri_or_path.split("#", 1)[0]
+
         # Handle special URIs
-        if uri_or_path == "about:blank":
+        if base_uri == "about:blank":
             self._set_page_content("")
-        elif uri_or_path.startswith("search:"):
-            query = uri_or_path[len("search:") :].strip()
+        elif base_uri.startswith("search:"):
+            query = base_uri[len("search:") :].strip()
             results = self._search_engine.search(query)
             self.page_title = f"{query} - Search"
             self._set_page_content(results, split_pages=False)
         else:
+            target_uri = base_uri
             if (
-                not uri_or_path.startswith("http:")
-                and not uri_or_path.startswith("https:")
-                and not uri_or_path.startswith("file:")
+                not base_uri.startswith("http:")
+                and not base_uri.startswith("https:")
+                and not base_uri.startswith("file:")
             ):
                 if len(self.history) > 1:
                     prior_address = self.history[-2][0]
-                    uri_or_path = urljoin(prior_address, uri_or_path)
-                    # Update the address with the fully-qualified path
-                    self.history[-1] = (uri_or_path, self.history[-1][1])
-            self._fetch_page(uri_or_path)
+                    target_uri = urljoin(prior_address, base_uri)
+                final_address = target_uri + (f"#{anchor}" if anchor else "")
+                self.history[-1] = (final_address, self.history[-1][1])
+            else:
+                if anchor:
+                    final_address = target_uri + f"#{anchor}"
+                    self.history[-1] = (final_address, self.history[-1][1])
+            self._fetch_page(target_uri)
 
         self.viewport_current_page = 0
+        if anchor:
+            self._scroll_to_anchor(anchor)
+
         self.find_on_page_query = None
         self.find_on_page_viewport = None
+
+    def _scroll_to_anchor(self, anchor: str) -> None:
+        """Move the viewport to the page containing the given anchor."""
+        location = self.page_content.lower().find(anchor.lower())
+        if location == -1:
+            return
+        for idx, (start, end) in enumerate(self.viewport_pages):
+            if start <= location < end:
+                self.viewport_current_page = idx
+                break
 
     @property
     def viewport(self) -> str:

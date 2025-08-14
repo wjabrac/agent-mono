@@ -2,8 +2,14 @@ import pytest
 
 from llama_index.core import MockEmbedding, StorageContext, VectorStoreIndex
 from llama_index.core.llms import MockLLM
-from llama_index.core.vector_stores.types import BasePydanticVectorStore
+from llama_index.core.vector_stores.types import (
+    BasePydanticVectorStore,
+    FilterOperator,
+    MetadataFilter,
+    MetadataFilters,
+)
 from llama_index.vector_stores.redis import RedisVectorStore
+from redisvl.schema import IndexSchema
 
 
 def test_class():
@@ -72,3 +78,35 @@ async def test_async_default_usage(
 
     # test delete index
     await vector_store.async_delete_index()
+
+
+def test_in_filter_expression(redis_client):
+    schema = IndexSchema.from_dict(
+        {
+            "index": {"name": "llama_index_in", "prefix": "llama_index_in"},
+            "fields": [
+                {"type": "tag", "name": "id"},
+                {"type": "tag", "name": "doc_id"},
+                {"type": "text", "name": "text"},
+                {
+                    "type": "vector",
+                    "name": "vector",
+                    "attrs": {"dims": 1536, "algorithm": "flat", "distance_metric": "cosine"},
+                },
+                {"type": "tag", "name": "animal"},
+            ],
+        }
+    )
+    vector_store = RedisVectorStore(
+        schema=schema, redis_client=redis_client, overwrite=True
+    )
+    filters = MetadataFilters(
+        filters=[
+            MetadataFilter(
+                key="animal", value=["turtle", "whale"], operator=FilterOperator.IN
+            )
+        ]
+    )
+    expr = vector_store._create_redis_filter_expression(filters)
+    assert str(expr) == "(@animal:{turtle}|@animal:{whale})"
+    vector_store.delete_index()
