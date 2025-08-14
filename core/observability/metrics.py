@@ -38,3 +38,12 @@ class Histogram:
 tool_calls_total = Counter("tool_calls_total", "Tool calls", ["tool","ok"])
 tool_latency_ms = Histogram("tool_latency_ms", "Tool latency (ms)", ["tool"])
 tool_skipped_total = Counter("tool_skipped_total", "Tool skipped", ["tool","reason"])
+
+# Additional request-level metric for lookups
+
+tool_requests_total = Counter("tool_requests_total", "Tool requests", ["tool","found"])
+
+def record_tool_request(tool_name: str, found: str) -> None:
+	# found must be "true" or "false"
+	val = "true" if str(found).lower() in ("1","true","yes") or found == True else "false"  # type: ignore
+	ool_requests_total.labels(tool_name, val).inc()
