@@ -184,9 +184,41 @@ class LocalHFProvider(BaseLLMProvider):
         return len(self._tokenizer.encode(text))
 
 
+# ----------------------------------------------------------------------
+# GPT4All provider
+
+
+class GPT4AllProvider(BaseLLMProvider):
+    """Provider using a local GPT4All quantized model."""
+
+    def __init__(self, model_name: Optional[str] = None, model_path: Optional[str] = None):
+        self.model_name = model_name or os.getenv("GPT4ALL_MODEL", "gpt4all-falcon-q4_0.bin")
+        self.model_path = os.path.expanduser(model_path or os.getenv("GPT4ALL_MODEL_PATH", "~/.cache/gpt4all"))
+        self._model = None
+
+    def _ensure_loaded(self) -> None:  # pragma: no cover - heavy import
+        if self._model is not None:
+            return
+        from gpt4all import GPT4All  # type: ignore
+
+        self._model = GPT4All(self.model_name, model_path=self.model_path, allow_download=False)
+
+    def generate(self, prompt: str, **kwargs: Any) -> str:  # pragma: no cover - heavy
+        self._ensure_loaded()
+        trace_id = self._log_start(prompt, kwargs)
+        start = time.time()
+        text = self._model.generate(prompt, **kwargs)  # type: ignore[attr-defined]
+        self._log_end(trace_id, True, start, {"response": text})
+        return text
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
+
+
 __all__ = [
     "BaseLLMProvider",
     "OpenAIProvider",
     "LocalHFProvider",
+    "GPT4AllProvider",
 ]
 
