@@ -30,13 +30,40 @@ try:
 except Exception:
     httpx = None  # optional
 
+# Advanced planning expansion (conditionals/loops)
+try:
+    from core.planning.advanced import expand_plan  # type: ignore
+except Exception:
+    def expand_plan(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:  # type: ignore
+        return steps
+
+# Reflection checkpoints
+try:
+    from core.planning.reflection import maybe_replan  # type: ignore
+except Exception:
+    def maybe_replan(trace_id: str, prompt: str, outputs: List[Dict[str, Any]]):  # type: ignore
+        return []
+
+# Policy and sandbox
+try:
+    from core.security.policy import check_tool_allowed, is_risky_tool  # type: ignore
+    from core.security.sandbox import run_in_sandbox  # type: ignore
+except Exception:
+    def check_tool_allowed(tool_name: str, args: Dict[str, Any]) -> None:  # type: ignore
+        return
+    def is_risky_tool(tool_name: str) -> bool:  # type: ignore
+        return False
+    def run_in_sandbox(fn, args, timeout_s=20):  # type: ignore
+        return fn(args)
+
+
 def plan_steps(prompt: str) -> List[Dict[str, Any]]:
     # Prefer local LLM via Ollama if available, else fallback to rules
     if _local_llm_available() and httpx:
         try:
             # Minimal Ollama prompt to propose tools from registry
             tool_list = ", ".join(sorted(_REGISTRY.keys()))
-            q = f"You are a planner. Given a task: '{prompt}', propose a short ordered JSON list of steps using tools from: [{tool_list}]. Each step: {{tool, args}}."
+            q = f"You are a planner. Given a task: '{prompt}', propose a short ordered JSON list of steps using tools from: [{tool_list}]. Each step: {tool, args}."
             base = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
             r = httpx.post(f"{base}/api/generate", json={"model": os.getenv("OLLAMA_MODEL","llama3.1:8b"), "prompt": q, "stream": False}, timeout=8)
             r.raise_for_status()
@@ -74,6 +101,7 @@ def _args_hash(args: Dict[str, Any]) -> str:
 def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
     start = time.time()
     spec = get(step.tool)
+    check_tool_allowed(step.tool, step.args)
     cache_key = _args_hash(step.args)
     if step.ttl_s:
         cached = cache_get(step.tool, cache_key)
@@ -87,9 +115,13 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
         t0 = time.time()
         try:
             # Timeout wrapper using thread pool to keep minimal deps
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                fut = ex.submit(spec.run, step.args)
-                res = fut.result(timeout=step.timeout_s)
+            if is_risky_tool(step.tool):
+                # execute in a sandboxed subprocess for risky tools
+                res = run_in_sandbox(spec.run, step.args, timeout_s=step.timeout_s)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(spec.run, step.args)
+                    res = fut.result(timeout=step.timeout_s)
             tool_calls_total.labels(step.tool, "true").inc()
             tool_latency_ms.labels(step.tool).observe((time.time()-t0)*1000.0)
             if step.ttl_s:
@@ -175,6 +207,7 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
     # Plan if not provided
     if not steps:
         planned = plan_steps(prompt)
+        planned = expand_plan(planned)
         log_event(trace_id, "decision", "planner:proposed", {"steps": planned})
         steps = planned
     # Parse and sort
@@ -220,4 +253,13 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread
                             remaining.discard(i)
                 finally:
                     remaining.discard(schedule.index(s))
+    # Reflection checkpoint and optional replanning pass
+    extra = maybe_replan(trace_id, prompt, out)
+    if extra:
+        for st in extra:
+            try:
+                res = _run_with_policy(Step(**st), trace_id)
+                out.append(res)
+            except Exception:
+                pass
     return {"trace_id": trace_id, "outputs": out}
