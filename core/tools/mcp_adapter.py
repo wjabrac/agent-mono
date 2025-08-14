@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from core.tools.registry import ToolSpec, register
 from core.instrumentation import instrument_tool
 from core.trace_context import set_trace
@@ -81,10 +81,10 @@ register(ToolSpec(name="mcp.git.status", input_model=GitStatusInput, run=_mcp_gi
 # Add delegate and kb.search microtools for convenience
 
 class DelegateInput(BaseModel):
-	prompt: str
-	thread_id: str | None = None
-	tags: list[str] = []
-	override_steps: list[dict[str, Any]] | None = None
+        prompt: str
+        thread_id: str | None = None
+        tags: list[str] = Field(default_factory=list)
+        override_steps: list[dict[str, Any]] | None = None
 
 @instrument_tool("agent.delegate")
 def _delegate(args: Dict[str, Any]) -> Dict[str, Any]:
