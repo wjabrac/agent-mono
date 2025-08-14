@@ -77,8 +77,3 @@ All are disabled by default. See docs/architecture/tool-runtime-and-planning.md.
 
 For development conventions and testing commands, see AGENTS.md.
 For an overview of outstanding work and integration plans, see docs/project-scope.md.
-
-
-If you drop that into your **`README.md`**, it will fully cover both quick start instructions and the extra sections from `docs/quickstart.md`.  
-
-Do you also want me to **include a troubleshooting block** in this merged README for the `"agent: command not found"` issue you’re having so new installs don’t hit the same problem? That way you won’t have to remember the fix later.
