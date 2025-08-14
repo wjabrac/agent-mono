@@ -6,13 +6,13 @@
    Use any Python package manager to install the project in editable mode:
 
    ```bash
-   pip install -e .
+   pip install --no-deps -e .
    ```
 
 2. **Create a plugin template**
 
    ```bash
-   python tools/agent_cli.py create plugin my_plugin
+   agent create plugin my_plugin
    ```
 
    This generates `plugins/my_plugin` with a stub `ToolSpec` implementation.
@@ -20,7 +20,7 @@
    To scaffold a new service instead:
 
    ```bash
-   python tools/agent_cli.py create service my_service
+   agent create service my_service
    ```
 
    which creates `services/my_service` with a minimal FastAPI app.
@@ -47,3 +47,7 @@ Feature-flagged modules add dynamic tool loading, a policy engine, and advanced 
 - Planning: `core.planning.advanced` enables conditional/loop expansion; `core.planning.reflection` adds checkpoints.
 
 All are disabled by default. See `docs/architecture/tool-runtime-and-planning.md`.
+
+---
+
+For development conventions and testing commands, see [AGENTS.md](AGENTS.md).
