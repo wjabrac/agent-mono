@@ -1,4 +1,34 @@
 
+## Quick start
+
+1. **Install dependencies**
+
+   Use any Python package manager to install the project in editable mode:
+
+   ```bash
+   pip install -e .
+   ```
+
+2. **Create a plugin template**
+
+   ```bash
+   python tools/agent_plugin_cli.py plugin create my_plugin
+   ```
+
+   This generates `plugins/my_plugin` with a stub `ToolSpec` implementation.
+
+3. **Enable optional features** (all disabled by default)
+
+   ```bash
+   export TOOL_HOT_RELOAD=true              # dynamic plugin reloads
+   export POLICY_ENGINE_ENABLED=true        # allowlist, FS roots, rate limits
+   export ADVANCED_PLANNING=true            # conditionals/loops in plans
+   ```
+
+   A `hitl.ok` file approves human-in-the-loop pauses when `HITL_DEFAULT=true`.
+
+See [`docs/quickstart.md`](docs/quickstart.md) for more details.
+
 ## Tool registry, policy, HITL, and planning (experimental)
 
 Feature-flagged modules add dynamic tool loading, a policy engine, and advanced planning:
