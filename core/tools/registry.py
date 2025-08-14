@@ -1,6 +1,6 @@
 import importlib, pkgutil, inspect, os, json, time, threading, sys
 from typing import Dict, Any, Callable, Type, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from core.observability.metrics import record_tool_request
 from core.tools.manifest import ensure_tool_entry
 
@@ -43,19 +43,16 @@ def _log_discovery_error(mod_name: str, error: Exception) -> None:
 def _load_remote_tools_from_config() -> None:
     if not _REMOTE_CONFIG_PATH or not os.path.exists(_REMOTE_CONFIG_PATH):
         return
-    try:
-        from core.tools.remote import RemoteToolConfig, build_remote_tool
-        with open(_REMOTE_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        tools = cfg if isinstance(cfg, list) else cfg.get("tools", [])
-        for item in tools:
-            try:
-                spec = build_remote_tool(RemoteToolConfig(**item))
-                register(spec)
-            except Exception:
-                continue
-    except Exception as e:
-        _log_discovery_error("remote_tools_config", e)
+    from core.tools.remote import RemoteToolConfig, build_remote_tool
+    with open(_REMOTE_CONFIG_PATH, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    tools = cfg if isinstance(cfg, list) else cfg.get("tools", [])
+    for item in tools:
+        try:
+            spec = build_remote_tool(RemoteToolConfig(**item))
+            register(spec)
+        except (IOError, ValidationError) as e:
+            _log_discovery_error("remote_tools_config", e)
 
 
 def _do_discover(package: str) -> None:

@@ -1,5 +1,6 @@
-import os, json, time
+import os, json, time, logging
 from typing import Dict, Any, List
+from pydantic import ValidationError
 
 MANIFEST_PATH = os.getenv("TOOLS_MANIFEST_PATH", "data/tools_manifest.json")
 
@@ -13,12 +14,13 @@ def _ensure_manifest_exists() -> None:
 
 
 def load_manifest() -> Dict[str, Any]:
-	_ensure_manifest_exists()
-	try:
-		with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-			return json.load(f) or {}
-	except Exception:
-		return {}
+        _ensure_manifest_exists()
+        try:
+                with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+                        return json.load(f) or {}
+        except (IOError, ValidationError) as e:
+                logging.getLogger(__name__).error("failed to load manifest: %s", e)
+                return {}
 
 
 def save_manifest(mf: Dict[str, Any]) -> None:
