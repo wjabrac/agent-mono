@@ -208,3 +208,21 @@ def baz():
     chunks = code_splitter.split_text(text)
     assert chunks[0].startswith("def foo():")
     assert chunks[1].startswith("def baz():")
+
+
+@pytest.mark.skipif(SHOULD_SKIP, reason="tree_sitter not installed")
+def test_auto_detect_language_code_splitter() -> None:
+    """CodeSplitter should detect language when none is provided."""
+    if "CI" in os.environ:
+        return
+
+    code_splitter = CodeSplitter(chunk_lines=4, chunk_lines_overlap=1, max_chars=30)
+
+    text = """\
+def foo():
+    print("bar")
+"""
+
+    chunks = code_splitter.split_text(text)
+    assert code_splitter.language == "python"
+    assert chunks[0].startswith("def foo():")
