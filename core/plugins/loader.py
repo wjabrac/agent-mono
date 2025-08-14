@@ -1,14 +1,19 @@
 import os
 import json
-import importlib.util
-import threading
+import pkgutil
 import inspect
+import threading
+import importlib.util
+from importlib import import_module
 from typing import Dict, Any, List
+
 from pydantic import BaseModel, ValidationError
+from core.tools.registry import ToolSpec, register
 
 # Track loaded plugin manifests by path -> mtime
 _loaded: Dict[str, float] = {}
 _lock = threading.Lock()
+
 
 class PluginManifest(BaseModel):
     """Schema for plugin.json files."""
@@ -26,7 +31,9 @@ def _log_error(mod_name: str, error: Exception) -> None:
 
 
 def _load_module(path: str):
-    spec = importlib.util.spec_from_file_location(os.path.splitext(os.path.basename(path))[0], path)
+    spec = importlib.util.spec_from_file_location(
+        os.path.splitext(os.path.basename(path))[0], path
+    )
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load module from {path}")
     module = importlib.util.module_from_spec(spec)
@@ -35,14 +42,13 @@ def _load_module(path: str):
 
 
 def _register_from_module(module) -> None:
-    from core.tools.registry import register, ToolSpec
     for _, obj in inspect.getmembers(module):
         if isinstance(obj, ToolSpec):
             register(obj)
 
 
 def discover_plugins(root: str = "plugins") -> None:
-    """Recursively discover plugin.json manifests under ``root`` and load entry modules."""
+    """Recursively discover plugin.json manifests under root and load entry modules."""
     if not os.path.isdir(root):
         return
     with _lock:
@@ -68,3 +74,32 @@ def discover_plugins(root: str = "plugins") -> None:
             except (IOError, ValidationError, Exception) as e:
                 _log_error(manifest_path, e)
                 continue
+
+
+# Backwards-compatible loader for simple "plugins" packages
+def load_plugins(package: str = "plugins") -> List[str]:
+    """
+    Load ToolSpecs from all modules in package.
+
+    Each module under package is imported. If the module defines a top-level
+    variable named "spec" that is an instance of ToolSpec, it will be registered.
+    """
+    loaded: List[str] = []
+    try:
+        pkg = import_module(package)
+    except Exception:
+        return loaded
+
+    for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
+        full_name = f"{package}.{modname}"
+        try:
+            mod = import_module(full_name)
+        except Exception as e:
+            _log_error(full_name, e)
+            continue
+        spec = getattr(mod, "spec", None)
+        if isinstance(spec, ToolSpec):
+            register(spec)
+            loaded.append(spec.name)
+    return loaded
+
