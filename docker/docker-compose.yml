@@ -11,6 +11,13 @@ services:
     ports: ["6333:6333","6334:6334"]
     volumes: [ "qdrant_data:/qdrant/storage" ]
 
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    environment:
+      - MEILI_NO_ANALYTICS=true
+    ports: ["7700:7700"]
+    volumes: ["meili_data:/meili_data"]
+
   temporal:
     image: temporalio/auto-setup:latest
     environment: [ "DB=sqlite" ]
@@ -34,18 +41,6 @@ services:
       - SALT=devsalt
       - NEXTAUTH_URL=http://localhost:3000
 
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prom-data:/prometheus
-    ports: ["9090:9090"]
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    volumes: [ "./grafana:/var/lib/grafana" ]
-    ports: ["3001:3000"]
-
   ollama:
     image: ollama/ollama:latest
     ports: ["11434:11434"]
@@ -53,17 +48,19 @@ services:
 
   autoagent-core:
     build: ../apps/autoagent-core
-    depends_on: [n8n, qdrant, temporal, langfuse, prometheus, grafana, ollama]
+    depends_on: [n8n, qdrant, meilisearch, temporal, langfuse, ollama]
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_HOST=http://ollama:11434
       - TEMPORAL_HOST=temporal:7233
+      - PORT=8080
     volumes:
       - ../apps/autoagent-core:/app
       - ../core:/core
       - ../plugins:/plugins
       - ../data:/data
     ports: ["8080:8080"]
+    command: bash -lc "pip install -e . && uvicorn app.main:app --host 0.0.0.0 --port 8080"
 
   temporal-worker:
     build: ../services/temporal-worker
@@ -72,10 +69,10 @@ services:
       - TEMPORAL_HOST=temporal:7233
     volumes:
       - ..:/workspace
-    ports: ["9109:9109"]
 
 volumes:
   n8n_data:
   qdrant_data:
+  meili_data:
   pg_data:
   ollama_data:

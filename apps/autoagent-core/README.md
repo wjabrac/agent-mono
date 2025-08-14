@@ -80,6 +80,7 @@ Welcome to AutoAgent! AutoAgent is a **Fully-Automated** and highly **Self-Devel
   * <a href='#installation'>Installation</a>
   * <a href='#api-keys-setup'>API Keys Setup</a>
   * <a href='#start-with-cli-mode'>Start with CLI Mode</a>
+  * <a href='#logging'>Logging Configuration</a>
 * <a href='#todo'>☑️ Todo List</a>
 * <a href='#reproduce'>🔬 How To Reproduce the Results in the Paper</a>
 * <a href='#documentation'>📖 Documentation</a>
@@ -421,6 +422,27 @@ python process_tool_docs.py
 
 More features coming soon! 🚀 **Web GUI interface** under development.
 
+
+
+<span id='logging'/>
+
+### Logging Configuration
+
+AutoAgent uses `LoggerManager` for runtime logging and includes optional OpenTelemetry tracing. Configure behavior with the following environment variables:
+
+- `LOG_LEVEL` – `DEBUG`, `INFO`, `WARN`, or `ERROR` (defaults to `INFO`).
+- `JSON_LOGS` – set to `true` to emit structured JSON logs.
+- `DEFAULT_LOG` – write logs to a file when set to `true`.
+- `LOG_PATH` – optional path to the log file when `DEFAULT_LOG` is enabled.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` – when provided, OpenTelemetry traces from the server and workflow are sent to the specified collector. Without it, traces are printed to the console.
+
+Example configuration:
+
+```bash
+export LOG_LEVEL=DEBUG
+export JSON_LOGS=true
+export DEFAULT_LOG=true
+```
 
 
 <span id='todo'/>

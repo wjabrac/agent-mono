@@ -1,0 +1,8 @@
+{
+  "rag": {
+    "scopes": [
+      "mail.send",
+      "db.write"
+    ]
+  }
+}
