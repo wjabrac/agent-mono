@@ -5,7 +5,7 @@ This guide shows how to try the experimental agent runtime.
 ## Installation
 
 ```bash
-pip install -e .
+pip install --no-deps -e .
 ```
 
 Any Python package manager can be used. The project targets Python 3.10+.
@@ -13,14 +13,14 @@ Any Python package manager can be used. The project targets Python 3.10+.
 ## Creating a plugin
 
 ```bash
-python tools/agent_cli.py create plugin my_plugin
+agent create plugin my_plugin
 ```
 
 A new folder `plugins/my_plugin` is created with a minimal `ToolSpec` that you
 can extend. To scaffold a service instead:
 
 ```bash
-python tools/agent_cli.py create service my_service
+agent create service my_service
 ```
 
 ## Enabling optional modules
@@ -37,4 +37,6 @@ export HITL_DEFAULT=true                 # require human approvals
 A `hitl.ok` file in the repository root approves paused waves when HITL is enabled.
 
 For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md).
+
+For development guidelines, consult [AGENTS.md](../AGENTS.md).
 

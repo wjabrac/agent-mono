@@ -2,14 +2,24 @@ import argparse
 import json
 from pathlib import Path
 
-from agent_extensions import (
-    flow_augment,
-    flow_validate,
-    generate_tests,
-    instrument_code,
-    release_prep,
-    secure_plugin,
-)
+try:
+    from .agent_extensions import (
+        flow_augment,
+        flow_validate,
+        generate_tests,
+        instrument_code,
+        release_prep,
+        secure_plugin,
+    )
+except ImportError:  # pragma: no cover
+    from agent_extensions import (  # type: ignore
+        flow_augment,
+        flow_validate,
+        generate_tests,
+        instrument_code,
+        release_prep,
+        secure_plugin,
+    )
 
 TEMPLATE = (
     "from core.tools.registry import ToolSpec\n\n"
