@@ -1,0 +1,7 @@
+{
+  "name": "sample_plugin",
+  "version": "0.1.0",
+  "entry": "sample.py",
+  "scopes": ["demo"],
+  "commands": []
+}
