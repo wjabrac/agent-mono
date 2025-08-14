@@ -1,0 +1,14 @@
+name: agent-mono-codeql
+queries:
+  - uses: security-and-quality
+paths:
+  - core
+  - apps
+  - tools
+  - scripts
+paths-ignore:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/vendor/**"
+  - "**/dist/**"
+  - "**/node_modules/**"
