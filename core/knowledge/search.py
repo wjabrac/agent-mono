@@ -1,5 +1,6 @@
 import os, json
 from typing import Any, List, Dict
+from core.memory import db
 
 ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() in ("1","true","yes")
 VENDOR = os.getenv("SEMANTIC_VENDOR", "qdrant")
@@ -110,3 +111,21 @@ def semantic_query(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
 		except Exception:
 			return []
 	return []
+
+def keyword_query(keyword: str, top_k: int = 5) -> List[Dict[str, Any]]:
+	with db.get_conn() as c:
+		rows = c.execute(
+			"SELECT trace_id, payload FROM trace_events WHERE payload LIKE ? ORDER BY created_at DESC LIMIT ?",
+			(f"%{keyword}%", top_k),
+		).fetchall()
+	return [{"trace_id": r[0], "text": r[1], "score": 0.0} for r in rows]
+
+def hybrid_query(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+	sem = semantic_query(query, top_k)
+	kw = keyword_query(query, top_k)
+	combined = { (r["trace_id"], r["text"]): r for r in sem }
+	for r in kw:
+		key = (r["trace_id"], r["text"])
+		if key not in combined:
+			combined[key] = r
+	return list(combined.values())[:top_k]
