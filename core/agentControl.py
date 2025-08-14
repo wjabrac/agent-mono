@@ -16,14 +16,22 @@ def execute_steps(prompt: str, steps: List[Dict[str, Any]], thread_id=None, tags
     for st in steps:
         s = Step(**st)
         log_event(trace_id, "decision", "planner:step", {"tool": s.tool, "args": s.args, "tags": tags or []})
-        spec = get(s.tool)
+        try:
+            spec = get(s.tool)
+        except KeyError:
+            log_event(trace_id, "decision", "tool:lookup_error", {"tool": s.tool, "tags": tags or []})
+            raise
         t0 = time.time()
         try:
             res = spec.run(s.args)
+            ms = (time.time()-t0)*1000.0
             tool_calls_total.labels(s.tool, "true").inc()
-            tool_latency_ms.labels(s.tool).observe((time.time()-t0)*1000.0)
+            tool_latency_ms.labels(s.tool).observe(ms)
+            log_event(trace_id, "decision", "tool:result", {"tool": s.tool, "ms": int(ms), "ok": True, "output": res, "tags": tags or []})
             out.append({"tool": s.tool, "output": res})
         except Exception as e:
+            ms = (time.time()-t0)*1000.0
+            log_event(trace_id, "decision", "tool:result", {"tool": s.tool, "ms": int(ms), "ok": False, "error": type(e).__name__, "msg": str(e), "tags": tags or []})
             tool_calls_total.labels(s.tool, "false").inc()
             raise
     return {"trace_id": trace_id, "outputs": out}
