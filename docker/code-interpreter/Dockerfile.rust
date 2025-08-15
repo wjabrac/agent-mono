@@ -1,0 +1,12 @@
+FROM rust:1.75-slim
+
+# Install basic tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Security hardening
+RUN chmod 755 /usr/local/bin/rustc && \
+    find / -perm /6000 -type f -exec chmod a-s {} \; || true
+
+WORKDIR /app
