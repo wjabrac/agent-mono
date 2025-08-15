@@ -40,3 +40,13 @@ For design details see [`docs/architecture/tool-runtime-and-planning.md`](archit
 
 For development guidelines, consult [AGENTS.md](../AGENTS.md).
 
+## Optional tooling
+
+Bring up auxiliary services (Redis, n8n, Node-RED, Prefect, a TensorFlow/LangChain/LlamaIndex API, Odoo, WordPress, MariaDB, and Mautic) via Docker:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+They provide orchestration, content management, and ML capabilities for experiments.
+

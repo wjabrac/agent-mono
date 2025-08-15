@@ -1,0 +1,11 @@
+{
+  "name": "agent-mono",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "dockerode": "^3.3.6",
+    "execa": "^8.0.1",
+    "tar-fs": "^3.0.4",
+    "trivy": "^0.0.1-security"
+  }
+}

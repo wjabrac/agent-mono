@@ -23,7 +23,7 @@
    agent create service my_service
    ```
 
-   which creates `services/my_service` with a minimal FastAPI app.
+  which creates `services/my_service` with a minimal FastAPI app.
 
 3. **Enable optional features** (all disabled by default)
 
@@ -36,6 +36,16 @@
    A `hitl.ok` file approves human-in-the-loop pauses when `HITL_DEFAULT=true`.
 
 See [`docs/quickstart.md`](docs/quickstart.md) for more details.
+
+## Auxiliary tooling via Docker
+
+Run supporting services like Redis, n8n, Node-RED, a Prefect scheduler, a TensorFlow/LangChain/LlamaIndex service, Odoo, WordPress, MariaDB, and Mautic with Docker Compose:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+These tools are optional and help integrate external workflows and content systems.
 
 ## Tool registry, policy, HITL, and planning (experimental)
 

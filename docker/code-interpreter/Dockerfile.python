@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+# Minimal secure environment
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Security hardening
+RUN chmod 755 /usr/local/bin/python && \
+    find / -perm /6000 -type f -exec chmod a-s {} \; || true
+
+WORKDIR /app
