@@ -1,9 +1,18 @@
 version: "3.9"
 services:
+  redis:
+    image: redis:alpine
+    ports: ["6379:6379"]
+
   n8n:
     image: n8nio/n8n:latest
     ports: ["5678:5678"]
-    environment: [ "GENERIC_TIMEZONE=UTC" ]
+    environment:
+      - GENERIC_TIMEZONE=UTC
+      - DB_TYPE=redis
+      - DB_REDIS_HOST=redis
+      - DB_REDIS_PORT=6379
+    depends_on: [redis]
     volumes: [ "n8n_data:/home/node/.n8n" ]
 
   qdrant:
@@ -62,6 +71,62 @@ services:
     ports: ["8080:8080"]
     command: bash -lc "pip install -e . && uvicorn app.main:app --host 0.0.0.0 --port 8080"
 
+  nodered:
+    image: nodered/node-red
+    ports: ["1880:1880"]
+    environment:
+      - MQTT_BROKER=redis://redis:6379
+    depends_on: [redis]
+
+  scheduler:
+    image: prefecthq/prefect:latest
+    command: prefect agent start -q default
+    volumes:
+      - ../flows:/flows
+    depends_on: [redis]
+
+  python-ml:
+    build: ../services/python-ml
+    ports: ["5001:5001"]
+    volumes:
+      - ../data:/data
+      - ~/.cache:/root/.cache
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on: [redis]
+
+  odoo:
+    image: odoo:15
+    ports: ["8069:8069"]
+    volumes:
+      - odoo_data:/var/lib/odoo
+
+  mariadb:
+    image: mariadb:10.5
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: wordpress
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  wp:
+    image: wordpress:php8.0-fpm-alpine
+    ports: ["8081:80"]
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_CONFIG_EXTRA: |
+        define('JWT_AUTH_SECRET_KEY', 'changeme');
+    depends_on: [mariadb]
+    volumes:
+      - wp_plugins:/var/www/html/wp-content/plugins
+
+  mautic:
+    image: mautic/mautic:latest
+    ports: ["8082:80"]
+    depends_on: [mariadb]
+    volumes:
+      - mautic_data:/var/www/html
+
   temporal-worker:
     build: ../services/temporal-worker
     depends_on: [temporal]
@@ -76,3 +141,7 @@ volumes:
   meili_data:
   pg_data:
   ollama_data:
+  odoo_data:
+  mariadb_data:
+  wp_plugins:
+  mautic_data:
