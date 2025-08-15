@@ -1,65 +1,91 @@
+README.md
 
-## Quick start
+# Agent Mono
 
-1. **Install dependencies**
+Unified runtime for Python and TypeScript agents, with a plugin system, policy controls, and optional advanced planning.
 
-   Use any Python package manager to install the project in editable mode:
+## Install dependencies
 
-   ```bash
-   pip install --no-deps -e .
-   ```
-
-2. **Create a plugin template**
-
-   ```bash
-   agent create plugin my_plugin
-   ```
-
-   This generates `plugins/my_plugin` with a stub `ToolSpec` implementation.
-
-   To scaffold a new service instead:
-
-   ```bash
-   agent create service my_service
-   ```
-
-  which creates `services/my_service` with a minimal FastAPI app.
-
-3. **Enable optional features** (all disabled by default)
-
-   ```bash
-   export TOOL_HOT_RELOAD=true              # dynamic plugin reloads
-   export POLICY_ENGINE_ENABLED=true        # allowlist, FS roots, rate limits
-   export ADVANCED_PLANNING=true            # conditionals/loops in plans
-   ```
-
-   A `hitl.ok` file approves human-in-the-loop pauses when `HITL_DEFAULT=true`.
-
-See [`docs/quickstart.md`](docs/quickstart.md) for more details.
-
-## Auxiliary tooling via Docker
-
-Run supporting services like Redis, n8n, Node-RED, a Prefect scheduler, a TensorFlow/LangChain/LlamaIndex service, Odoo, WordPress, MariaDB, and Mautic with Docker Compose:
-
+Use any Python package manager to install the project in editable mode:
 ```bash
+pip install --no-deps -e .
+
+Create a plugin template
+agent create plugin my_plugin
+
+
+Generates plugins/my_plugin with a stub ToolSpec implementation.
+
+To scaffold a new service instead:
+
+agent create service my_service
+
+
+Creates services/my_service with a minimal FastAPI app.
+
+Enable optional features
+
+All disabled by default.
+
+export TOOL_HOT_RELOAD=true              # dynamic plugin reloads
+export POLICY_ENGINE_ENABLED=true        # allowlist, FS roots, rate limits
+export ADVANCED_PLANNING=true            # conditionals and loops in plans
+export HITL_DEFAULT=false                # enable pauses when HITL is desired
+
+
+A hitl.ok file approves human-in-the-loop pauses when HITL_DEFAULT=true.
+
+See docs/quickstart.md for details.
+
+Auxiliary tooling via Docker
+
+Run supporting services like Redis, n8n, Node-RED, a Prefect scheduler, TensorFlow or LangChain workers, Odoo, WordPress, MariaDB, and Mautic:
+
 docker compose -f docker/docker-compose.yml up -d
-```
 
-These tools are optional and help integrate external workflows and content systems.
+Tool registry, policy, HITL, and planning
 
-## Tool registry, policy, HITL, and planning (experimental)
+Feature-flagged modules add dynamic tool loading, a policy engine, and advanced planning. Keep flags off in production unless you have guardrails.
 
-Feature-flagged modules add dynamic tool loading, a policy engine, and advanced planning:
 
-- Registry: `core.tools.registry` supports hot-load and remote tool configs (`REMOTE_TOOLS_CONFIG`).
-- Policy: `core.security.policy` provides allowlist, path restrictions (`FS_SAFE_ROOTS`), and HTTP rate limiting.
-- HITL: `HITL_DEFAULT` controls per-wave approvals; drop a `hitl.ok` file to approve.
-- Planning: `core.planning.advanced` enables conditional/loop expansion; `core.planning.reflection` adds checkpoints.
+docs/quickstart.md
+```markdown
+# Quickstart
 
-All are disabled by default. See `docs/architecture/tool-runtime-and-planning.md`.
+This guide shows both Python and TypeScript flows.
 
----
+## Python
 
-For development conventions and testing commands, see [AGENTS.md](AGENTS.md).
+Create a virtualenv and install:
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install --no-deps -e .
 
-For an overview of outstanding work and integration plans, see [docs/project-scope.md](docs/project-scope.md).
+
+Run:
+
+agent --help      # or: python -m core.cli --help if no console script
+
+TypeScript
+
+Install and start:
+
+npm install
+npm start
+
+
+Optional environment:
+
+export TOOL_HOT_RELOAD=true
+export POLICY_ENGINE_ENABLED=true
+export ADVANCED_PLANNING=true
+export HITL_DEFAULT=false
+
+
+A file named hitl.ok in the repo root approves paused waves when HITL is enabled.
+
+Docker helpers
+
+Optional supporting services:
+
+docker compose -f docker/docker-compose.yml up -d

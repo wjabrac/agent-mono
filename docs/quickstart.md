@@ -38,6 +38,15 @@ A `hitl.ok` file in the repository root approves paused waves when HITL is enabl
 
 For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md).
 
+## TypeScript agent
+
+Install dependencies and start the Node-based agent:
+
+```bash
+npm install
+npm start
+```
+
 For development guidelines, consult [AGENTS.md](../AGENTS.md).
 
 ## Optional tooling
