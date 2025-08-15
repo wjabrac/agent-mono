@@ -36,14 +36,11 @@ def register(tool: ToolSpec) -> None:
         _REGISTRY[tool.name] = tool
 
 def get(name: str) -> ToolSpec:
-    with _tracer.start_as_current_span("tool.get") as span:
-        span.set_attribute("tool.name", name)
-        exists = name in _REGISTRY
-        record_tool_request(name, exists)
-        span.set_attribute("tool.found", exists)
-        if not exists:
-            raise KeyError(f"tool not found: {name}")
-        return _REGISTRY[name]
+    if name not in _REGISTRY:
+        record_tool_request(name, False)
+        raise KeyError(f"tool not found: {name}")
+    record_tool_request(name, True)
+    return _REGISTRY[name]
 
 def discover(package: str = "plugins") -> None:
     with _tracer.start_as_current_span("tools.discover") as span:
