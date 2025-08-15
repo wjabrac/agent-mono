@@ -30,10 +30,17 @@
    ```bash
    export TOOL_HOT_RELOAD=true              # dynamic plugin reloads
    export POLICY_ENGINE_ENABLED=true        # allowlist, FS roots, rate limits
-   export ADVANCED_PLANNING=true            # conditionals/loops in plans
-   ```
+  export ADVANCED_PLANNING=true            # conditionals/loops in plans
+  ```
 
-   A `hitl.ok` file approves human-in-the-loop pauses when `HITL_DEFAULT=true`.
+  A `hitl.ok` file approves human-in-the-loop pauses when `HITL_DEFAULT=true`.
+
+4. **Run the TypeScript agent**
+
+   ```bash
+   npm install
+   npm start
+   ```
 
 See [`docs/quickstart.md`](docs/quickstart.md) for more details.
 
