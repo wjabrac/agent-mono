@@ -3,13 +3,7 @@ import { z } from "zod";
 export abstract class BaseTool {
   abstract name: string;
   abstract description: string;
-  // schema is validated when safeExecute is called
   abstract schema: z.ZodTypeAny;
-
-  // Backward compatible entrypoint
-  async execute(args: any): Promise<string> {
-    return this.safeExecute(args);
-  }
 
   async safeExecute(args: unknown): Promise<string> {
     const parsed = this.schema.parse(args);
