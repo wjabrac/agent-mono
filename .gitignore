@@ -1,3 +1,8 @@
 data/agent_memory.sqlite
 node_modules/
 dist/
+
+.env
+hitl.ok
+__pycache__/
+*.pyc

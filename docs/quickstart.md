@@ -34,8 +34,6 @@ export ADVANCED_PLANNING=true            # plan conditionals and loops
 export HITL_DEFAULT=true                 # require human approvals
 ```
 
-A `hitl.ok` file in the repository root approves paused waves when HITL is enabled.
-
 For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md).
 
 ## TypeScript agent
@@ -48,4 +46,18 @@ npm start
 ```
 
 For development guidelines, consult [AGENTS.md](../AGENTS.md).
+
+## Metrics stack
+
+Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy `.env.example` and edit), then start Graphite and Grafana with the `metrics` profile:
+
+```bash
+./docker/gen-env.sh               # generate .env with random secrets
+# or
+cp .env.example .env              # edit values manually
+docker compose -f docker/docker-compose.yml --profile metrics up
+```
+
+Grafana listens on port 3001 and Graphite's web UI on port 8083. Both require the
+credentials supplied in `.env` and Grafana includes a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to 127.0.0.1 for local access only. For production, place a TLS-terminating proxy with authentication in front of all HTTP services.
 
