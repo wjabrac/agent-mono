@@ -1,5 +1,6 @@
-# Readme.md
-See docs/quickstart.md for details.
+## Quick start
+
+1See docs/quickstart.md for details.
 
 
 Drop-in replacement: docs/quickstart.md

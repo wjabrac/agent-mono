@@ -1,1 +1,3 @@
 data/agent_memory.sqlite
+node_modules/
+dist/
