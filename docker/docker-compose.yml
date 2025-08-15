@@ -1,36 +1,110 @@
 version: "3.9"
 services:
   redis:
-    image: redis:alpine
-    ports: ["6379:6379"]
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
 
   n8n:
-    image: n8nio/n8n:latest
-    ports: ["5678:5678"]
+    image: n8nio/n8n:1.68.2
+    ports: ["127.0.0.1:5678:5678"]
     environment:
       - GENERIC_TIMEZONE=UTC
       - DB_TYPE=redis
       - DB_REDIS_HOST=redis
       - DB_REDIS_PORT=6379
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASS}
     depends_on: [redis]
     volumes: [ "n8n_data:/home/node/.n8n" ]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   qdrant:
-    image: qdrant/qdrant:latest
-    ports: ["6333:6333","6334:6334"]
+    image: qdrant/qdrant:v1.9.0
+    ports: ["127.0.0.1:6333:6333","127.0.0.1:6334:6334"]
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     volumes: [ "qdrant_data:/qdrant/storage" ]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   meilisearch:
-    image: getmeili/meilisearch:latest
+    image: getmeili/meilisearch:v1.5.0
     environment:
       - MEILI_NO_ANALYTICS=true
-    ports: ["7700:7700"]
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+    ports: ["127.0.0.1:7700:7700"]
     volumes: ["meili_data:/meili_data"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  graphite:
+    image: graphiteapp/graphite-statsd:1.1.10-3
+    profiles: ["metrics"]
+    ports:
+      - "127.0.0.1:8083:80"
+      - "127.0.0.1:2003:2003"
+      - "127.0.0.1:2004:2004"
+      - "127.0.0.1:2023:2023"
+      - "127.0.0.1:2024:2024"
+      - "127.0.0.1:8125:8125/udp"
+      - "127.0.0.1:8126:8126"
+    volumes:
+      - graphite_data:/opt/graphite/storage
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  grafana:
+    image: grafana/grafana:10.4.6
+    profiles: ["metrics"]
+    depends_on: [graphite]
+    ports: ["127.0.0.1:3001:3000"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=grafana_admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   temporal:
-    image: temporalio/auto-setup:latest
+    image: temporalio/auto-setup:1.23.0
     environment: [ "DB=sqlite" ]
-    ports: ["7233:7233"]
+    ports: ["127.0.0.1:7233:7233"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   postgres:
     image: postgres:16
@@ -39,21 +113,40 @@ services:
       - POSTGRES_USER=langfuse
       - POSTGRES_DB=langfuse
     volumes: [ "pg_data:/var/lib/postgresql/data" ]
+    ports: ["127.0.0.1:5432:5432"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   langfuse:
-    image: langfuse/langfuse:latest
+    image: langfuse/langfuse:2.3.3
     depends_on: [postgres]
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     environment:
       - DATABASE_URL=postgresql://langfuse:langfuse@postgres:5432/langfuse
-      - NEXTAUTH_SECRET=devsecret
-      - SALT=devsalt
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
       - NEXTAUTH_URL=http://localhost:3000
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   ollama:
-    image: ollama/ollama:latest
-    ports: ["11434:11434"]
+    image: ollama/ollama:0.1.41
+    ports: ["127.0.0.1:11434:11434"]
     volumes: [ "ollama_data:/root/.ollama" ]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   autoagent-core:
     build: ../apps/autoagent-core
@@ -68,38 +161,68 @@ services:
       - ../core:/core
       - ../plugins:/plugins
       - ../data:/data
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
     command: bash -lc "pip install -e . && uvicorn app.main:app --host 0.0.0.0 --port 8080"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   nodered:
-    image: nodered/node-red
-    ports: ["1880:1880"]
+    image: nodered/node-red:3.1.0
+    ports: ["127.0.0.1:1880:1880"]
     environment:
       - MQTT_BROKER=redis://redis:6379
     depends_on: [redis]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
 
   scheduler:
-    image: prefecthq/prefect:latest
+    image: prefecthq/prefect:2.20.7
     command: prefect agent start -q default
     volumes:
       - ../flows:/flows
     depends_on: [redis]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
 
   python-ml:
     build: ../services/python-ml
-    ports: ["5001:5001"]
+    ports: ["127.0.0.1:5001:5001"]
     volumes:
       - ../data:/data
       - ~/.cache:/root/.cache
     environment:
       - REDIS_URL=redis://redis:6379
     depends_on: [redis]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   odoo:
-    image: odoo:15
-    ports: ["8069:8069"]
+    image: odoo:15.0
+    ports: ["127.0.0.1:8069:8069"]
     volumes:
       - odoo_data:/var/lib/odoo
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   mariadb:
     image: mariadb:10.5
@@ -108,24 +231,44 @@ services:
       MYSQL_DATABASE: wordpress
     volumes:
       - mariadb_data:/var/lib/mysql
+      ports: ["127.0.0.1:3306:3306"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   wp:
-    image: wordpress:php8.0-fpm-alpine
-    ports: ["8081:80"]
+    image: wordpress:6.4.3-php8.0-fpm-alpine
+    ports: ["127.0.0.1:8081:80"]
     environment:
       WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_JWT_AUTH_SECRET_KEY: ${WORDPRESS_JWT_AUTH_SECRET_KEY}
       WORDPRESS_CONFIG_EXTRA: |
-        define('JWT_AUTH_SECRET_KEY', 'changeme');
+        define('JWT_AUTH_SECRET_KEY', getenv('WORDPRESS_JWT_AUTH_SECRET_KEY'));
     depends_on: [mariadb]
     volumes:
       - wp_plugins:/var/www/html/wp-content/plugins
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
 
   mautic:
-    image: mautic/mautic:latest
-    ports: ["8082:80"]
+    image: mautic/mautic:5.0.0
+    ports: ["127.0.0.1:8082:80"]
     depends_on: [mariadb]
     volumes:
       - mautic_data:/var/www/html
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
 
   temporal-worker:
     build: ../services/temporal-worker
@@ -145,3 +288,5 @@ volumes:
   mariadb_data:
   wp_plugins:
   mautic_data:
+  graphite_data:
+  grafana_data:

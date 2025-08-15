@@ -32,7 +32,7 @@ export HITL_DEFAULT=false
 ```bash
 export HITL_PER_STEP=true
 ```
-- Approve by creating a `hitl.ok` file (path controlled by `HITL_TOKEN`).
+- Approve by creating the file referenced by `HITL_TOKEN` (defaults to `/run/hitl.ok`).
 
 ### Advanced planning and reflection
 ```bash

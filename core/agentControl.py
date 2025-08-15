@@ -216,8 +216,8 @@ def _await_human_approval(phase_name: str, steps: List[Step]) -> None:
     if os.getenv("HITL_DEFAULT", "true").lower() in ("1","true","yes"):  # default require HITL
         log_event(_thread_local.trace_id, "decision", "hitl:await", {"phase": phase_name, "steps": [s.tool for s in steps]})
         # Minimal blocking prompt in serverless env: wait for a flag file
-        token = os.getenv("HITL_TOKEN", "hitl.ok")
-        path = os.path.join(os.getenv("LOCAL_ROOT","."), token)
+        token = os.getenv("HITL_TOKEN", "/run/hitl.ok")
+        path = token if os.path.isabs(token) else os.path.join(os.getenv("LOCAL_ROOT","."), token)
         while not os.path.exists(path):
             time.sleep(1)
         try:
