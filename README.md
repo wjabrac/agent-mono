@@ -1,13 +1,16 @@
-# Agent Mono
+# Readme.md
+See docs/quickstart.md for details.
 
-Unified runtime for Python and TypeScript agents. The repo includes:
-- Python CLI entry point for tools, planning, and execution
-- TypeScript agent runtime with planning, response generation, and security utilities
-- Plugin system for tools, with hot reload and policy controls
 
-## Install
+Drop-in replacement: docs/quickstart.md
+```markdown
+# Quickstart
 
-Python
+This guide shows both Python and TypeScript flows.
+
+## Python
+
+Create a virtualenv and install:
 ```bash
-python -m venv .venv && source .venv/bin/activate  # use Scripts\activate on Windows
+python -m venv .venv && source .venv/bin/activate
 pip install --no-deps -e .
