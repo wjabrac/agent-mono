@@ -1,9 +1,13 @@
 import importlib
 from types import SimpleNamespace
+
+import pytest
+
 from core.tools.registry import discover, _REGISTRY
 import core.planning.advanced as adv
 from core.security.policy import check_tool_allowed
 from core.agentControl import execute_steps
+import core.security.policy as policy
 
 
 def test_registry_discovers_plugins():
@@ -84,3 +88,25 @@ def test_duplicate_registration_warning():
         register(spec2)
         assert any("duplicate tool registration" in str(wi.message) for wi in w)
 
+
+def test_allowed_tools(monkeypatch):
+    monkeypatch.setenv("POLICY_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("ALLOWED_TOOLS", "json_parse")
+    check_tool_allowed("json_parse", {})
+    with pytest.raises(PermissionError):
+        check_tool_allowed("web_fetch", {"url": "https://example.com"})
+
+
+def test_risky_tool_uses_sandbox(monkeypatch):
+    monkeypatch.setenv("HITL_DEFAULT", "false")
+    monkeypatch.setattr(policy, "RISKY_TOOLS", {"json_parse"})
+    called = {}
+
+    def _sandbox(fn, args, timeout_s=20):
+        called["sandbox"] = True
+        return fn(args)
+
+    monkeypatch.setattr("core.agentControl.run_in_sandbox", _sandbox)
+    out = execute_steps("echo", steps=[{"tool": "json_parse", "args": {"text": "{}"}}])
+    assert called.get("sandbox") is True
+    assert out["outputs"][0]["output"]["json"] == {}
