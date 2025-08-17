@@ -1,3 +1,5 @@
+"""In-memory registry for agent tools."""
+
 from __future__ import annotations
 import importlib
 import importlib.util
@@ -14,28 +16,43 @@ from core.observability.metrics import record_tool_request
 
 _tracer = _trace.get_tracer("core.tools.registry", "0.1.0")
 
+
 class ToolSpec(BaseModel):
+    """Specification for a tool runnable by the agent."""
+
     name: str
     input_model: Optional[Type[BaseModel]] = None
     run: Callable[[Dict[str, Any]], Dict[str, Any]]
 
+
 _REGISTRY: Dict[str, ToolSpec] = {}
+
 
 # Expose the in-memory map via metrics.registry for tests that probe existence
 class _RegistryWrapper:
+    """Proxy exposing the registry for metric instrumentation."""
+
     def get(self, name: str) -> ToolSpec:
+        """Retrieve a tool specification by name."""
         return _REGISTRY[name]
+
 
 _metrics.registry = _RegistryWrapper()
 
+
 def register(tool: ToolSpec) -> None:
+    """Register a tool specification with the global registry."""
+
     with _tracer.start_as_current_span("tool.register") as span:
         span.set_attribute("tool.name", tool.name)
         if tool.name in _REGISTRY:
             warnings.warn("duplicate tool registration", UserWarning)
         _REGISTRY[tool.name] = tool
 
+
 def get(name: str) -> ToolSpec:
+    """Retrieve a registered tool specification by name."""
+
     with _tracer.start_as_current_span("tool.get") as span:
         span.set_attribute("tool.name", name)
         exists = name in _REGISTRY
@@ -45,7 +62,10 @@ def get(name: str) -> ToolSpec:
             raise KeyError(f"tool not found: {name}")
         return _REGISTRY[name]
 
+
 def discover(package: str = "plugins") -> None:
+    """Import modules to register tools from a package or directory."""
+
     with _tracer.start_as_current_span("tools.discover") as span:
         span.set_attribute("package", package)
         if not package:
@@ -90,7 +110,10 @@ def discover(package: str = "plugins") -> None:
                 elif callable(obj) and hasattr(obj, "_microtool_spec"):
                     register(build_toolspec_from_microtool(obj))
 
+
 def _log_discovery_error(mod_name: str, error: Exception) -> None:
+    """Record a discovery error during tool loading."""
+
     with _tracer.start_as_current_span("discovery.error") as span:
         span.set_attribute("module", mod_name)
         span.set_attribute("error.type", type(error).__name__)
