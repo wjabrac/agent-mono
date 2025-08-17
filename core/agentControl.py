@@ -1,4 +1,6 @@
-from typing import Dict, Any, List, Optional, Set
+"""Core planning and execution utilities for agent tool chains."""
+
+from typing import Dict, Any, List, Optional, Set, Callable
 from pydantic import BaseModel
 from core.tools.registry import discover, get, _REGISTRY  # type: ignore
 from core.trace_context import set_trace
@@ -9,10 +11,17 @@ import time, os, json, hashlib, concurrent.futures, threading, asyncio, inspect
 
 # Manifest usage tracking
 try:
-	from core.tools.manifest import register_usage as register_usage_metric  # type: ignore
+        from core.tools.manifest import register_usage as register_usage_metric  # type: ignore
 except Exception:
-	def register_usage_metric(name: str, success: bool = True, tags=None, path: str = "", description: str = ""):
-		return
+        def register_usage_metric(
+            name: str,
+            success: bool = True,
+            tags: Optional[Dict[str, Any]] = None,
+            path: str = "",
+            description: str = "",
+        ) -> None:
+                """Fallback metric registrar when manifest tracking is unavailable."""
+                return
 
 # Discover all plugins
 discover("plugins")
@@ -20,10 +29,11 @@ discover("plugins")
 # --------------- Planner (local-first) ---------------
 
 def _local_llm_available() -> bool:
+    """Check for an available local Ollama host."""
     return os.getenv("OLLAMA_HOST") is not None
 
 def _rule_based_plan(prompt: str) -> List[Dict[str, Any]]:
-    # Extremely lightweight heuristic: map keywords to tools
+    """Generate a naive plan using simple keyword heuristics."""
     steps: List[Dict[str, Any]] = []
     p = prompt.lower()
     if "http" in p or "url" in p or "web" in p:
@@ -42,13 +52,15 @@ try:
     from core.planning.advanced import expand_plan  # type: ignore
 except Exception:
     def expand_plan(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:  # type: ignore
+        """Return steps unchanged when advanced planning is unavailable."""
         return steps
 
 # Reflection checkpoints
 try:
     from core.planning.reflection import maybe_replan  # type: ignore
 except Exception:
-    def maybe_replan(trace_id: str, prompt: str, outputs: List[Dict[str, Any]]):  # type: ignore
+    def maybe_replan(trace_id: str, prompt: str, outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:  # type: ignore
+        """Provide no additional steps when reflection is not enabled."""
         return []
 
 # Policy and sandbox
@@ -57,16 +69,25 @@ try:
     from core.security.sandbox import run_in_sandbox  # type: ignore
 except Exception:
     def check_tool_allowed(tool_name: str, args: Dict[str, Any]) -> None:  # type: ignore
+        """Allow all tools when policy checks are unavailable."""
         return
     def is_risky_tool(tool_name: str) -> bool:  # type: ignore
+        """Mark all tools as safe in the absence of risk analysis."""
         return False
     def enforce_output_limits(tool_name: str, output: Any) -> None:  # type: ignore
+        """Skip output limiting when no policy is provided."""
         return
-    def run_in_sandbox(fn, args, timeout_s=20):  # type: ignore
+    def run_in_sandbox(
+        fn: Callable[[Dict[str, Any]], Any],
+        args: Dict[str, Any],
+        timeout_s: int = 20,
+    ) -> Any:  # type: ignore
+        """Execute the function directly when sandboxing is unavailable."""
         return fn(args)
 
 
 def plan_steps(prompt: str) -> List[Dict[str, Any]]:
+    """Plan tool steps for a given prompt using an LLM or heuristics."""
     # Prefer local LLM via Ollama if available, else fallback to rules
     if _local_llm_available() and httpx:
         try:
@@ -90,6 +111,7 @@ def plan_steps(prompt: str) -> List[Dict[str, Any]]:
 # --------------- Execution policy (retries, timeouts, fallbacks, cache) ---------------
 
 class Step(BaseModel):
+    """Specification for invoking a tool within a plan."""
     tool: str
     args: Dict[str, Any]
     depends_on: Optional[List[str]] = None
@@ -105,9 +127,11 @@ _def_fallbacks: Dict[str, str] = {  # example mapping
 _thread_local = threading.local()
 
 def _args_hash(args: Dict[str, Any]) -> str:
+    """Return a stable hash for the given argument dictionary."""
     return hashlib.sha256(json.dumps(args, sort_keys=True).encode()).hexdigest()
 
 def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
+    """Execute a tool step while honoring caching, retries, and policies."""
     start = time.time()
     spec = get(step.tool)
     check_tool_allowed(step.tool, step.args)
@@ -180,6 +204,7 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
 # --------------- DAG / parallel scheduling ---------------
 
 def _toposort(steps: List[Step]) -> List[Step]:
+    """Sort steps based on dependencies using Kahn's algorithm."""
     name_to_idx = {f"{i}:{s.tool}": i for i, s in enumerate(steps)}
     indeg = {i: 0 for i in range(len(steps))}
     edges: Dict[int, Set[int]] = {i: set() for i in range(len(steps))}
@@ -206,6 +231,7 @@ def _toposort(steps: List[Step]) -> List[Step]:
 # --------------- Human-in-the-loop defaults for multi-phase ---------------
 
 def _needs_hitl(steps: List[Step]) -> bool:
+    """Check if human approval should be requested for the steps."""
     # heuristic: multi-step or any depends_on => treat as multi-phase
     return len(steps) > 1 or any(s.depends_on for s in steps)
 
@@ -213,6 +239,7 @@ def _needs_hitl(steps: List[Step]) -> bool:
 # For now, reads env HITL_DEFAULT=true to require approval on multi-phase
 
 def _await_human_approval(phase_name: str, steps: List[Step]) -> None:
+    """Pause execution until a signal indicates human approval."""
     if os.getenv("HITL_DEFAULT", "true").lower() in ("1","true","yes"):  # default require HITL
         log_event(_thread_local.trace_id, "decision", "hitl:await", {"phase": phase_name, "steps": [s.tool for s in steps]})
         # Minimal blocking prompt in serverless env: wait for a flag file
@@ -227,8 +254,15 @@ def _await_human_approval(phase_name: str, steps: List[Step]) -> None:
 
 # --------------- Main entrypoint ---------------
 
-def execute_steps(prompt: str, steps: List[Dict[str, Any]] | None = None, thread_id=None, tags=None) -> Dict[str, Any]:
-    trace_id = start_trace(thread_id); _thread_local.trace_id = trace_id
+def execute_steps(
+    prompt: str,
+    steps: List[Dict[str, Any]] | None = None,
+    thread_id=None,
+    tags=None,
+) -> Dict[str, Any]:
+    """Plan, schedule, and execute tool steps for a prompt."""
+    trace_id = start_trace(thread_id)
+    _thread_local.trace_id = trace_id
     set_trace(thread_id, trace_id, tags or [])
     out = []
     # Plan if not provided
