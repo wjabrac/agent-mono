@@ -1,6 +1,6 @@
 # Quick start
 
-This guide shows how to try the experimental agent runtime.
+This guide shows how to try the experimental agent runtime. For an overview of the architecture and features, see the [README](../README.md).
 
 ## Installation
 
@@ -25,7 +25,7 @@ agent create service my_service
 
 ## Enabling optional modules
 
-All advanced features are disabled by default. Enable them with environment variables:
+Advanced modules provide planning, security, and observability. All advanced features are disabled by default. Enable them with environment variables:
 
 ```bash
 export TOOL_HOT_RELOAD=true              # reload plugins without restart
@@ -34,7 +34,7 @@ export ADVANCED_PLANNING=true            # plan conditionals and loops
 export HITL_DEFAULT=true                 # require human approvals
 ```
 
-For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md).
+These variables activate the planning, security, and observability capabilities. For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
 
 ## TypeScript agent
 
