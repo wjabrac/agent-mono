@@ -8,11 +8,26 @@ version = "0.1.0"
 description = "Experimental agent runtime monorepo"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["pydantic>=2"]
 
 [project.scripts]
 agent = "tools.agent_cli:main"
 
+[project.optional-dependencies]
+http = ["httpx>=0.27"]
+shell = ["psutil>=5.9"]
+images = ["pillow>=10"]
+
+[project.entry-points."agent_mono.plugins"]
+csv_parse = "plugins.csv_parse:spec"
+json_parse = "plugins.json_parse:spec"
+pdf_text = "plugins.pdf_text:spec"
+image_info = "plugins.image_info:spec"
+web_fetch = "plugins.web_fetch:spec"
+introspect = "plugins.introspect:spec"
+agent_suggest_refactor = "plugins.agent_suggest:spec_refactor"
+agent_suggest_create = "plugins.agent_suggest:spec_create"
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "tools*"]
+include = ["core*", "tools*", "agent_mono*"]

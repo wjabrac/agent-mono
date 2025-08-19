@@ -8,6 +8,12 @@ This guide shows how to try the experimental agent runtime. For an overview of t
 pip install --no-deps -e .
 ```
 
+Include extras to enable plugin dependencies:
+
+```bash
+pip install --no-deps -e .[http,images]
+```
+
 Any Python package manager can be used. The project targets Python 3.10+.
 
 ## Creating a plugin

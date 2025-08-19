@@ -29,6 +29,12 @@ graph TD
 pip install --no-deps -e .
 ```
 
+Install optional extras only when needed:
+
+```bash
+pip install --no-deps -e .[http,images]
+```
+
 ### Create a plugin
 
 ```bash
