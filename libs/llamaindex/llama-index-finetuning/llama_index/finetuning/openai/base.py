@@ -62,17 +62,22 @@ class OpenAIFinetuneEngine(BaseLLMFinetuneEngine):
         if self._validate_json:
             validate_json(self.data_path)
 
-        # TODO: figure out how to specify file name in the new API
-        # file_name = os.path.basename(self.data_path)
+        # upload file with a useful filename for easier debugging
+        file_name = os.path.basename(self.data_path)
 
-        # upload file
         with open(self.data_path, "rb") as f:
-            output = self._client.files.create(file=f, purpose="fine-tune")
+            output = self._client.files.create(
+                file=f,
+                purpose="fine-tune",
+                filename=file_name,
+            )
         logger.info("File uploaded...")
         if self._verbose:
             print("File uploaded...")
 
         # launch training
+        max_wait_minutes = 15
+        waited = 0
         while True:
             try:
                 job_output = self._client.fine_tuning.jobs.create(
@@ -81,10 +86,13 @@ class OpenAIFinetuneEngine(BaseLLMFinetuneEngine):
                 self._start_job = job_output
                 break
             except openai.BadRequestError:
+                if waited >= max_wait_minutes:
+                    raise
                 print("Waiting for file to be ready...")
                 time.sleep(60)
+                waited += 1
         info_str = (
-            f"Training job {output.id} launched. "
+            f"Training job {job_output.id} launched. "
             "You will be emailed when it's complete."
         )
         logger.info(info_str)
