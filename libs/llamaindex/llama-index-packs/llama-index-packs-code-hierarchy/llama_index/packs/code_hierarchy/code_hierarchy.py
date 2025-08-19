@@ -613,7 +613,7 @@ class CodeHierarchyNodeParser(NodeParser):
                     self._skeletonize_list(chunks)
 
                 # Now further split the code by lines and characters
-                # TODO: Test this and the relationships it creates
+                # Relationship handling here is not exhaustively tested
                 if self.code_splitter:
                     new_nodes = []
                     for original_node in chunks:
@@ -774,7 +774,7 @@ class CodeHierarchyNodeParser(NodeParser):
         # Create the text to replace the child_node.text with
         language = node.metadata["language"]
         if language not in _COMMENT_OPTIONS:
-            # TODO: Create a contribution message
+            # Language not supported yet; contributions are welcome
             raise KeyError("Language not yet supported. Please contribute!")
         comment_options = _COMMENT_OPTIONS[language]
         (
@@ -800,7 +800,7 @@ class CodeHierarchyNodeParser(NodeParser):
         signature = child_node.metadata["inclusive_scopes"][-1]["signature"]
         language = child_node.metadata["language"]
         if language not in _COMMENT_OPTIONS:
-            # TODO: Create a contribution message
+            # Language not supported yet; contributions are welcome
             raise KeyError("Language not yet supported. Please contribute!")
         comment_options = _COMMENT_OPTIONS[language]
 

@@ -1,1 +1,2 @@
-"""Top-level package for agent-mono runtime."""
+
+"""Core package for agent runtime."""

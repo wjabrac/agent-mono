@@ -57,7 +57,7 @@ class CrossEncoderFinetuneEngine(BaseCrossEncoderFinetuningEngine):
             CEBinaryClassificationEvaluator,
         )
 
-        # TODO: also add support for CERerankingEvaluator
+        # Only binary classification evaluation is currently supported
         evaluator: Optional[CEBinaryClassificationEvaluator] = None
 
         if val_dataset is not None:

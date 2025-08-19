@@ -24,15 +24,12 @@ graph TD
 ## Basic usage
 
 ### Installation
-
 ```bash
 pip install --no-deps -e .
 ```
-
-Install optional extras only when needed:
-
+### Run an instruction
 ```bash
-pip install --no-deps -e .[http,images]
+python -m agent_mono.cli "list files in /tmp"
 ```
 
 ### Create a plugin
