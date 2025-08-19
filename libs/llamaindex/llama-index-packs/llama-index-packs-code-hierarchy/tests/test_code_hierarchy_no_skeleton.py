@@ -600,7 +600,7 @@ const ExampleComponent: React.FC = () => {
         == chunks[0].id_
     )
 
-    # TODO: Unfortunately tree_splitter errors on the html elements
+    # HTML elements currently cause tree_splitter to error; skipped for now
 
 
 def test_cpp_code_splitter() -> None:

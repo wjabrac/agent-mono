@@ -1,6 +1,6 @@
 import json
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from llama_index.core.callbacks.base import BaseCallbackHandler
 from llama_index.core.callbacks.schema import CBEventType, EventPayload
@@ -123,7 +123,7 @@ class OpenAIFineTuningHandler(BaseFinetuningHandler):
         """
         Save the finetuning events to a file.
 
-        This saved format can be used for fine-tuning with OpenAI's API.
+        This saved format can be used for fine-tuning with Gradient AI's API.
         The structure for each json line is as follows:
         {
           messages: [
@@ -169,6 +169,22 @@ class GradientAIFineTuningHandler(BaseFinetuningHandler):
     in a `.jsonl` format that can be used for fine-tuning with Gradient AI's API.
     """
 
+    def __init__(
+        self,
+        serializer: Optional[Callable[[List[Any]], str]] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Init params.
+
+        Args:
+            serializer: Optional function to turn a list of messages into a
+                single string. Defaults to ``messages_to_history_str`` which is
+                a generic serialization and may not capture model specific
+                nuances.
+        """
+        super().__init__(**kwargs)
+        self._serializer = serializer
+
     def get_finetuning_events(self) -> Dict[str, Dict[str, Any]]:
         events_dict = {}
         for event_id, event in self._finetuning_events.items():
@@ -180,7 +196,7 @@ class GradientAIFineTuningHandler(BaseFinetuningHandler):
         """
         Save the finetuning events to a file.
 
-        This saved format can be used for fine-tuning with OpenAI's API.
+        This saved format can be used for fine-tuning with Gradient AI's API.
         The structure for each json line is as follows:
         {
           "inputs": "<full_prompt_str>"
@@ -194,8 +210,9 @@ class GradientAIFineTuningHandler(BaseFinetuningHandler):
         for event in events_dict.values():
             all_messages = event["messages"] + [event["response"]]
 
-            # TODO: come up with model-specific message->prompt serialization format
-            prompt_str = messages_to_history_str(all_messages)
+            # TODO: consider model-specific message->prompt serialization
+            serializer = self._serializer or messages_to_history_str
+            prompt_str = serializer(all_messages)
 
             input_dict = {"inputs": prompt_str}
             json_strs.append(json.dumps(input_dict))
