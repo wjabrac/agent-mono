@@ -24,13 +24,10 @@ graph TD
 ## Basic usage
 
 ### Installation
-
 ```bash
 pip install --no-deps -e .
 ```
-
 ### Run an instruction
-
 ```bash
 python -m agent_mono.cli "list files in /tmp"
 ```
