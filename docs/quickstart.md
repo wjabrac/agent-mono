@@ -5,7 +5,14 @@ This guide shows how to try the experimental agent runtime. For an overview of t
 ## Installation
 
 ```bash
-pip install --no-deps -e .
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
+
+Include extras to enable plugin dependencies:
+
+```bash
+pip install -e ".[http,images]"
 ```
 
 Any Python package manager can be used. The project targets Python 3.10+.

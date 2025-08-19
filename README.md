@@ -26,7 +26,14 @@ graph TD
 ### Installation
 
 ```bash
-pip install --no-deps -e .
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
+
+Install optional extras only when needed:
+
+```bash
+pip install -e ".[http,images]"
 ```
 
 ### Create a plugin
