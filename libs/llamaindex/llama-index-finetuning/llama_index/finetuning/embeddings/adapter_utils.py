@@ -70,11 +70,12 @@ def train_model(
     checkpoint_path: Optional[str] = None,
     checkpoint_save_steps: int = 500,
     # checkpoint_save_total_limit: int = 0,
+    loss_model: Optional[nn.Module] = None,
 ) -> None:
     """Train model."""
     model.to(device)
-    # TODO: hardcode loss now, make customizable later
-    loss_model = MyMultipleNegativesRankingLoss(model=model)
+    # Allow caller to provide a custom loss; otherwise, use default
+    loss_model = loss_model or MyMultipleNegativesRankingLoss(model=model)
     loss_model.to(device)
 
     # prepare optimizer/scheduler
@@ -138,7 +139,7 @@ def train_model(
             training_steps += 1
             global_step += 1
 
-            # TODO: skip eval for now
+            # Evaluation hook not yet implemented
             if checkpoint_path is not None and global_step % checkpoint_save_steps == 0:
                 full_ck_path = Path(checkpoint_path) / f"step_{global_step}"
                 model.save(str(full_ck_path))

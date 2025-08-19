@@ -36,6 +36,12 @@ Install optional extras only when needed:
 pip install -e ".[http,images]"
 ```
 
+### Run an instruction
+
+```bash
+python -m agent_mono.cli "list files in /tmp"
+```
+
 ### Create a plugin
 
 ```bash

@@ -108,7 +108,8 @@ def monkey_query(
 
     node_ids = []
     embeddings = []
-    # TODO: consolidate with get_query_text_embedding_similarities
+    # This duplicates logic from get_query_text_embedding_similarities
+    # but keeps the test implementation straightforward
     for node_id, embedding in self._data.embedding_dict.items():
         if node_filter_fn(node_id) and query_filter_fn(node_id):
             node_ids.append(node_id)

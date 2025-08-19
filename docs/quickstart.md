@@ -17,6 +17,12 @@ pip install -e ".[http,images]"
 
 Any Python package manager can be used. The project targets Python 3.10+.
 
+## Running an instruction
+
+```bash
+python -m agent_mono.cli "list files in /tmp"
+```
+
 ## Creating a plugin
 
 ```bash
