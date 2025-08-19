@@ -29,6 +29,12 @@ graph TD
 pip install --no-deps -e .
 ```
 
+### Run an instruction
+
+```bash
+python -m agent_mono.cli "list files in /tmp"
+```
+
 ### Create a plugin
 
 ```bash

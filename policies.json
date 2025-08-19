@@ -1,4 +1,9 @@
 {
+  "capabilities": {
+    "fs.write": {"default": "deny"},
+    "subprocess": {"default": "deny"},
+    "network": {"default": "deny"}
+  },
   "rag": {
     "scopes": [
       "mail.send",
