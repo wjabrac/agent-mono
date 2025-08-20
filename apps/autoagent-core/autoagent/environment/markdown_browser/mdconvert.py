@@ -32,6 +32,7 @@ try:
 except ModuleNotFoundError:
     DocLingDocumentConverter = None  # type: ignore
 
+
 # Optional Transcription support
 IS_AUDIO_TRANSCRIPTION_CAPABLE = False
 try:
@@ -463,16 +464,18 @@ class PdfConverter(DocumentConverter):
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".pdf":
             return None
-        try:  # pragma: no cover - optional dependency
-            from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+        text_content = ""
+        # Prefer docling if available, else fallback to pdfminer
+        try:
+            if DocLingDocumentConverter is None:
+                raise ModuleNotFoundError
             converter = DocLingDocumentConverter()
             result = converter.convert(local_path)
             text_content = result.document.export_to_markdown()
         except ModuleNotFoundError:
+            import pdfminer.high_level  # local import fallback
             text_content = pdfminer.high_level.extract_text(local_path)
         return DocumentConverterResult(title=None, text_content=text_content)
-
-
 class DocxConverter(HtmlConverter):
     """
     Converts DOCX files to Markdown. Style information (e.g.m headings) and tables are preserved where possible.
