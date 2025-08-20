@@ -22,6 +22,7 @@ class ToolSpec(BaseModel):
 
     name: str
     input_model: Optional[Type[BaseModel]] = None
+    output_model: Optional[Type[BaseModel]] = None
     run: Callable[[Dict[str, Any]], Dict[str, Any]]
 
 

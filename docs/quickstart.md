@@ -35,6 +35,10 @@ can extend. To scaffold a service instead:
 agent create service my_service
 ```
 
+Plugins execute in a sandboxed subprocess with strict CPU and memory limits.
+Validate all inputs and outputs with Pydantic models as shown in the templates.
+See [plugin-security](plugin-security.md) for more details.
+
 ## Enabling optional modules
 
 Advanced modules provide planning, security, and observability. All advanced features are disabled by default. Enable them with environment variables:
