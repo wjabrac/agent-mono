@@ -13,7 +13,7 @@ Any Python package manager can be used. The project targets Python 3.10+.
 ## Running an instruction
 
 ```bash
-python -m agent_mono.cli "list files in /tmp"
+python -m agent_mono.cli --dry-run "list files in /tmp"
 ```
 
 ## Creating a plugin
@@ -29,18 +29,11 @@ can extend. To scaffold a service instead:
 agent create service my_service
 ```
 
-## Enabling optional modules
+## Advanced modules
 
-Advanced modules provide planning, security, and observability. All advanced features are disabled by default. Enable them with environment variables:
-
-```bash
-export TOOL_HOT_RELOAD=true              # reload plugins without restart
-export POLICY_ENGINE_ENABLED=true        # allowlist, path restrictions, rate limits
-export ADVANCED_PLANNING=true            # plan conditionals and loops
-export HITL_DEFAULT=true                 # require human approvals
-```
-
-These variables activate the planning, security, and observability capabilities. For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+Planning and human approvals are experimental and not yet implemented. The
+policy engine is enabled by default; see the [README](../README.md) for the
+security model and configuration.
 
 ## TypeScript agent
 

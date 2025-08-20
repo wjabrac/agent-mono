@@ -17,8 +17,7 @@ graph TD
 - Scaffold plugins and services with the `agent` CLI.
 - Hot-reload tools during development.
 - Policy engine for security controls.
-- Advanced planning with loops and conditionals.
-- Human-in-the-loop approvals.
+- Planning (experimental and currently unimplemented).
 - Metrics and tracing via Graphite and Grafana.
 
 ## Basic usage
@@ -32,7 +31,7 @@ pip install --no-deps -e .
 ### Run an instruction
 
 ```bash
-python -m agent_mono.cli "list files in /tmp"
+python -m agent_mono.cli --dry-run "list files in /tmp"
 ```
 
 ### Create a plugin
@@ -41,14 +40,28 @@ python -m agent_mono.cli "list files in /tmp"
 agent create plugin my_plugin
 ```
 
-### Enable optional modules
+See [docs/quickstart.md](docs/quickstart.md) for more examples.
 
-```bash
-export ADVANCED_PLANNING=true
-export POLICY_ENGINE_ENABLED=true
+## Security model
+
+Policies follow a capability registry with default-deny semantics. A minimal
+policy looks like:
+
+```json
+{
+  "capabilities": {
+    "fs.read": { "default": "deny", "allowed_paths": ["/tmp"] },
+    "fs.write": { "default": "deny" },
+    "network": { "default": "deny" },
+    "subprocess": { "default": "deny" }
+  }
+}
 ```
 
-See [docs/quickstart.md](docs/quickstart.md) for more examples.
+Unknown capabilities are denied, and paths may be constrained via
+`allowed_paths` or `forbidden_paths` entries. The engine reads
+`POLICY_PATH` and `POLICY_ENGINE_ENABLED` from the environment to locate and
+enable the policy file.
 
 ## Metrics stack
 

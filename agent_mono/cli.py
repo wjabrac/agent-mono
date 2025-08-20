@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 
 def start_execution_plan(instruction: str) -> None:
@@ -9,14 +10,25 @@ def start_execution_plan(instruction: str) -> None:
     print(instruction)
 
 
-def run_agent(instruction: str) -> None:
+def run_agent(instruction: str, *, dry_run: bool = False) -> None:
     """Normalize the instruction and start execution."""
     normalized = instruction.strip()
+    if any(sep in normalized for sep in ("\n", " and ")):
+        raise SystemExit(
+            "Planning is not implemented; provide a single-step instruction."
+        )
+    if dry_run:
+        print(f"dry run: {normalized}")
+        return
     start_execution_plan(normalized)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a single instruction")
     parser.add_argument("instruction", type=str, help="Instruction for the agent")
+    parser.add_argument("--policy", type=str, help="Path to policy file")
+    parser.add_argument("--dry-run", action="store_true", help="Parse but do not execute")
     args = parser.parse_args()
-    run_agent(args.instruction)
+    if args.policy:
+        os.environ["POLICY_PATH"] = args.policy
+    run_agent(args.instruction, dry_run=args.dry_run)

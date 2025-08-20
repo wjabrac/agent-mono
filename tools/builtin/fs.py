@@ -1,32 +1,48 @@
-"""Filesystem write utility."""
+"""Filesystem write utility with policy enforcement."""
 from __future__ import annotations
 
-import sys
 import difflib
+import time
 from pathlib import Path
 from typing import Dict
 
-_ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-from config import POLICY_ENGINE_ENABLED
-from agent_mono import policy
+from agent_mono import logger, policy
 from agent_mono.fs_utils import write_text_atomic
 
 
-def _check_policy(capability: str) -> None:
-    if not POLICY_ENGINE_ENABLED:
-        return
-    policy.check(capability)
-
-
-def fs_write_text(path: Path, content: str) -> Dict:
-    """Write text to a file after policy check."""
-    _check_policy("fs.write")
-    original = path.read_text() if path.exists() else ""
-    write_text_atomic(path, content)
-    diff = "\n".join(
-        difflib.unified_diff(original.splitlines(), content.splitlines(), lineterm="")
-    )
-    return {"success": True, "diff": diff}
+def fs_write_text(path: Path, content: str, timeout: float = 10.0) -> Dict:
+    start = time.time()
+    try:
+        policy.check("fs.write", path=path, source="tools.builtin.fs_write_text")
+        original = path.read_text(encoding="utf-8") if path.exists() else ""
+        write_text_atomic(path, content)
+        if len(original) + len(content) <= 131072:
+            diff = "\n".join(
+                difflib.unified_diff(
+                    original.splitlines(), content.splitlines(), lineterm=""
+                )
+            )
+        else:
+            diff = "<diff suppressed>"
+        success, code, stderr = True, 0, ""
+    except PermissionError:
+        raise
+    except Exception as e:  # pragma: no cover - unexpected errors
+        success, code, stderr, diff = False, 1, str(e), ""
+    duration_ms = int((time.time() - start) * 1000)
+    bytes_written = len(content.encode("utf-8"))
+    logger.log_event("tool.fs.write", success=success, duration_ms=duration_ms, bytes=bytes_written)
+    return {
+        "success": success,
+        "code": code,
+        "stdout": "",
+        "stderr": stderr,
+        "duration_ms": duration_ms,
+        "meta": {
+            "capability": "fs.write",
+            "timeout_s": timeout,
+            "path": str(path.expanduser().resolve()),
+            "bytes": bytes_written,
+        },
+        "diff": diff,
+    }

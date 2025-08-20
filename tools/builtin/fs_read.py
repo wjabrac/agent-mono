@@ -1,25 +1,36 @@
-"""Filesystem read utility."""
+"""Filesystem read utility with policy enforcement."""
 from __future__ import annotations
 
-import sys
+import time
 from pathlib import Path
 from typing import Dict
 
-_ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-from config import POLICY_ENGINE_ENABLED
-from agent_mono import policy
+from agent_mono import logger, policy
 
 
-def _check_policy(capability: str) -> None:
-    if not POLICY_ENGINE_ENABLED:
-        return
-    policy.check(capability)
-
-
-def fs_read(path: Path) -> Dict:
-    """Read text from a file after policy check."""
-    _check_policy("fs.read")
-    return {"success": True, "content": path.read_text()}
+def fs_read(path: Path, timeout: float = 10.0) -> Dict:
+    start = time.time()
+    try:
+        policy.check("fs.read", path=path, source="tools.builtin.fs_read")
+        content = path.read_text(encoding="utf-8")
+        success, code, stderr = True, 0, ""
+    except PermissionError:
+        raise
+    except Exception as e:  # pragma: no cover - unexpected errors
+        success, code, stderr, content = False, 1, str(e), ""
+    duration_ms = int((time.time() - start) * 1000)
+    bytes_read = len(content.encode("utf-8"))
+    logger.log_event("tool.fs.read", success=success, duration_ms=duration_ms, bytes=bytes_read)
+    return {
+        "success": success,
+        "code": code,
+        "stdout": content,
+        "stderr": stderr,
+        "duration_ms": duration_ms,
+        "meta": {
+            "capability": "fs.read",
+            "timeout_s": timeout,
+            "path": str(path.expanduser().resolve()),
+            "bytes": bytes_read,
+        },
+    }

@@ -1,19 +1,8 @@
 {
   "capabilities": {
-    "fs.write": {
-      "default": "deny"
-    },
-    "network": {
-      "default": "deny"
-    },
-    "subprocess": {
-      "default": "deny"
-    }
-  },
-  "rag": {
-    "scopes": [
-      "mail.send",
-      "db.write"
-    ]
+    "fs.read":      { "default": "deny" },
+    "fs.write":     { "default": "deny" },
+    "network":      { "default": "deny" },
+    "subprocess":   { "default": "deny" }
   }
 }
