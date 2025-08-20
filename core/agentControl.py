@@ -1,13 +1,14 @@
 """Core planning and execution utilities for agent tool chains."""
 
-from typing import Dict, Any, List, Optional, Set, Callable
+from typing import Dict, Any, List, Optional, Callable
 from pydantic import BaseModel
-from core.tools.registry import discover, get, _REGISTRY  # type: ignore
+from core.tools.registry import discover, _REGISTRY  # type: ignore
 from core.trace_context import set_trace
 from core.observability.trace import start_trace, log_event
 from core.observability.metrics import tool_calls_total, tool_latency_ms, tool_skipped_total
 from core.memory.db import cache_get, cache_put, kv_put
-import time, os, json, hashlib, concurrent.futures, threading, asyncio, inspect
+from core.llm import get_provider
+import time, os, json, hashlib, concurrent.futures, threading
 
 # Manifest usage tracking
 try:
@@ -28,9 +29,15 @@ discover("plugins")
 
 # --------------- Planner (local-first) ---------------
 
-def _local_llm_available() -> bool:
-    """Check for an available local Ollama host."""
-    return os.getenv("OLLAMA_HOST") is not None
+def _ollama_base_url() -> str:
+    """Return the configured Ollama base URL with localhost fallback."""
+    return os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+
+def _ollama_available() -> bool:
+    """Return True when httpx is installed for local Ollama access."""
+    return httpx is not None
+
 
 def _rule_based_plan(prompt: str) -> List[Dict[str, Any]]:
     """Generate a naive plan using simple keyword heuristics."""
@@ -41,6 +48,32 @@ def _rule_based_plan(prompt: str) -> List[Dict[str, Any]]:
     if ".pdf" in p:
         steps.append({"tool": "pdf_text", "args": {"path": "./document.pdf"}})
     return steps or [{"tool": "web_fetch", "args": {"url": "https://example.com"}}]
+
+
+class _PlanStep(BaseModel):
+    tool: str
+    args: Dict[str, Any]
+
+
+def _llm_plan(prompt: str) -> List[Dict[str, Any]]:
+    """Use an LLM to propose a plan using available tools."""
+    provider = get_provider()
+    schema = json.dumps(_PlanStep.model_json_schema())
+    tool_list = ", ".join(sorted(_REGISTRY.keys()))
+    q = (
+        "You are a planning assistant. Given a user request and available tools,"
+        " return a JSON array of step objects. Each step must conform to the"
+        f" schema: {schema}. Available tools: [{tool_list}]. Request: {prompt}."
+        " Respond with only the JSON array."
+    )
+    try:
+        txt = provider.generate(q)
+        steps = json.loads(txt)
+        if isinstance(steps, list):
+            return steps
+    except Exception:
+        pass
+    return []
 
 try:
     import httpx
@@ -83,29 +116,43 @@ except Exception:
         timeout_s: int = 20,
     ) -> Any:  # type: ignore
         """Execute the function directly when sandboxing is unavailable."""
-        return fn(args)
+        try:
+            return fn(**args)
+        except TypeError:
+            return fn(args)
 
 
 def plan_steps(prompt: str) -> List[Dict[str, Any]]:
-    """Plan tool steps for a given prompt using an LLM or heuristics."""
-    # Prefer local LLM via Ollama if available, else fallback to rules
-    if _local_llm_available() and httpx:
+    """Plan tool steps for a given prompt using Ollama, provider LLM, or heuristics."""
+    # 1) Try local Ollama
+    if _ollama_available():
         try:
-            # Minimal Ollama prompt to propose tools from registry
             tool_list = ", ".join(sorted(_REGISTRY.keys()))
-            q = f"You are a planner. Given a task: '{prompt}', propose a short ordered JSON list of steps using tools from: [{tool_list}]. Each step object must be of the form {{\"tool\": \"...\", \"args\": {{...}}}}."
-            base = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
-            r = httpx.post(f"{base}/api/generate", json={"model": os.getenv("OLLAMA_MODEL","llama3.1:8b"), "prompt": q, "stream": False}, timeout=8)
+            q = (
+                "You are a planner. Given a task: '{p}', propose a short ordered JSON list "
+                "of steps using tools from: [{t}]. Each step object must be of the form "
+                '{"tool": "...", "args": {...}}.'
+            ).format(p=prompt, t=tool_list)
+            r = httpx.post(
+                f"{_ollama_base_url()}/api/generate",
+                json={"model": os.getenv("OLLAMA_MODEL", "llama3.1:8b"), "prompt": q, "stream": False},
+                timeout=8,
+            )
             r.raise_for_status()
-            txt = r.json().get("response","[]")
-            try:
-                steps = json.loads(txt)
-                if isinstance(steps, list):
-                    return steps
-            except Exception:
-                pass
+            txt = r.json().get("response", "[]")
+            steps = json.loads(txt)
+            if isinstance(steps, list):
+                return steps
         except Exception:
             pass
+    # 2) Try provider LLM
+    try:
+        steps = _llm_plan(prompt)
+        if steps:
+            return steps
+    except Exception:
+        pass
+    # 3) Fallback to simple heuristics
     return _rule_based_plan(prompt)
 
 # --------------- Execution policy (retries, timeouts, fallbacks, cache) ---------------
@@ -133,7 +180,7 @@ def _args_hash(args: Dict[str, Any]) -> str:
 def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
     """Execute a tool step while honoring caching, retries, and policies."""
     start = time.time()
-    spec = get(step.tool)
+    spec = _REGISTRY[step.tool]
     check_tool_allowed(step.tool, step.args)
     cache_key = _args_hash(step.args)
     if step.ttl_s:
@@ -153,10 +200,8 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
                 res = run_in_sandbox(spec.run, step.args, timeout_s=step.timeout_s)
             else:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                    fut = ex.submit(spec.run, step.args)
+                    fut = ex.submit(spec.run, **step.args)
                     res = fut.result(timeout=step.timeout_s)
-                    if inspect.isawaitable(res):
-                        res = asyncio.run(res)
             enforce_output_limits(step.tool, res)
             tool_calls_total.labels(step.tool, "true").inc()
             tool_latency_ms.labels(step.tool).observe((time.time()-t0)*1000.0)
@@ -181,9 +226,9 @@ def _run_with_policy(step: Step, trace_id: str) -> Dict[str, Any]:
     fb = step.fallback_tool or _def_fallbacks.get(step.tool)
     if fb:
         try:
-            fb_spec = get(fb)
+            fb_spec = _REGISTRY[fb]
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                fut = ex.submit(fb_spec.run, step.args)
+                fut = ex.submit(fb_spec.run, **step.args)
                 res = fut.result(timeout=step.timeout_s)
             enforce_output_limits(fb, res)
             log_event(trace_id, "decision", "executor:fallback", {"from": step.tool, "to": fb})
@@ -207,7 +252,7 @@ def _toposort(steps: List[Step]) -> List[Step]:
     """Sort steps based on dependencies using Kahn's algorithm."""
     name_to_idx = {f"{i}:{s.tool}": i for i, s in enumerate(steps)}
     indeg = {i: 0 for i in range(len(steps))}
-    edges: Dict[int, Set[int]] = {i: set() for i in range(len(steps))}
+    edges: Dict[int, set[int]] = {i: set() for i in range(len(steps))}
     for i, s in enumerate(steps):
         if not s.depends_on:
             continue
@@ -281,7 +326,7 @@ def execute_steps(
     # Parallel execution by waves
     # Determine waves by indegree (simple levelization)
     remaining = set(range(len(schedule)))
-    deps: Dict[int, Set[int]] = {i: set() for i in range(len(schedule))}
+    deps: Dict[int, set[int]] = {i: set() for i in range(len(schedule))}
     for i, s in enumerate(schedule):
         if s.depends_on:
             for j, ps in enumerate(schedule):
@@ -309,7 +354,7 @@ def execute_steps(
             futures = {}
             for s in wave:
                 try:
-                    spec = get(s.tool)
+                    spec = _REGISTRY[s.tool]
                 except KeyError:
                     log_event(trace_id, "decision", "tool:lookup_error", {"tool": s.tool})
                     raise
