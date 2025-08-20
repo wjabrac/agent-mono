@@ -20,7 +20,11 @@ import pandas as pd
 import pdfminer
 import pdfminer.high_level
 import pptx
-from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+
+try:  # pragma: no cover - optional dependency
+    from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    DocLingDocumentConverter = None  # type: ignore
 
 # File-format detection
 import puremagic
@@ -28,20 +32,22 @@ import requests
 from bs4 import BeautifulSoup
 
 # Optional Transcription support
-try:
+IS_AUDIO_TRANSCRIPTION_CAPABLE = False
+try:  # pragma: no cover - optional dependency
     import pydub
     import speech_recognition as sr
 
     IS_AUDIO_TRANSCRIPTION_CAPABLE = True
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pass
 
 # Optional YouTube transcription support
-try:
+IS_YOUTUBE_TRANSCRIPT_CAPABLE = False
+try:  # pragma: no cover - optional dependency
     from youtube_transcript_api import YouTubeTranscriptApi
 
     IS_YOUTUBE_TRANSCRIPT_CAPABLE = True
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pass
 
 
@@ -270,6 +276,9 @@ class YouTubeConverter(DocumentConverter):
         if not url.startswith("https://www.youtube.com/watch?"):
             return None
 
+        transcript_text: str = ""
+        title: str = ""
+
         # Parse the file
         soup = None
         with open(local_path, "rt", encoding="utf-8") as fh:
@@ -331,7 +340,6 @@ class YouTubeConverter(DocumentConverter):
             webpage_text += f"\n### Description\n{description}\n"
 
         if IS_YOUTUBE_TRANSCRIPT_CAPABLE:
-            transcript_text = ""
             parsed_url = urlparse(url)  # type: ignore
             params = parse_qs(parsed_url.query)  # type: ignore
             if "v" in params:
@@ -456,13 +464,15 @@ class PdfConverter(DocumentConverter):
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".pdf":
             return None
+        if DocLingDocumentConverter is None:
+            raise FileConversionException("docling is not installed")
         converter = DocLingDocumentConverter()
         result = converter.convert(local_path)
         text_content = result.document.export_to_markdown()
         return DocumentConverterResult(
             title=None,
             # text_content=pdfminer.high_level.extract_text(local_path),
-            text_content=text_content
+            text_content=text_content,
         )
 
 
