@@ -28,16 +28,16 @@ graph TD
 pip install --no-deps -e .
 ```
 
-### Run an instruction
-
-```bash
-python -m agent_mono.cli --dry-run "list files in /tmp"
-```
-
 ### Create a plugin
 
 ```bash
 agent create plugin my_plugin
+```
+
+### Run an instruction
+
+```bash
+python -m agent_mono.cli --dry-run "list files in /tmp"
 ```
 
 See [docs/quickstart.md](docs/quickstart.md) for more examples.

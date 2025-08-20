@@ -60,3 +60,4 @@ docker compose --profile metrics up
 Grafana listens on port 3001 and Graphite's web UI on port 8083. Both require the
 credentials supplied in `.env` and Grafana includes a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to 127.0.0.1 for local access only. For production, place a TLS-terminating proxy with authentication in front of all HTTP services.
 
+
