@@ -1,8 +1,16 @@
 {
   "capabilities": {
-    "fs.read":    { "default": "deny" },
-    "fs.write":   { "default": "deny" },
-    "network":    { "default": "deny" },
-    "subprocess": { "default": "deny" }
+    "fs.read": {
+      "default": "deny"
+    },
+    "fs.write": {
+      "default": "deny"
+    },
+    "network": {
+      "default": "deny"
+    },
+    "subprocess": {
+      "default": "deny"
+    }
   }
 }

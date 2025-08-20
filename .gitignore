@@ -7,3 +7,4 @@ hitl.ok
 __pycache__/
 *.pyc
 *.egg-info/
+**/agent_memory.sqlite

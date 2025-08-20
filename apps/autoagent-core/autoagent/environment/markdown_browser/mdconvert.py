@@ -26,23 +26,27 @@ import puremagic
 import requests
 from bs4 import BeautifulSoup
 
+# Optional docling support
+try:
+    from docling.document_converter import DocumentConverter as DocLingDocumentConverter  # type: ignore
+except ModuleNotFoundError:
+    DocLingDocumentConverter = None  # type: ignore
+
 # Optional Transcription support
 IS_AUDIO_TRANSCRIPTION_CAPABLE = False
-try:  # pragma: no cover - optional dependency
-    import pydub
-    import speech_recognition as sr
-
+try:
+    import pydub  # type: ignore
+    import speech_recognition as sr  # type: ignore
     IS_AUDIO_TRANSCRIPTION_CAPABLE = True
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
+except ModuleNotFoundError:
     pass
 
 # Optional YouTube transcription support
 IS_YOUTUBE_TRANSCRIPT_CAPABLE = False
-try:  # pragma: no cover - optional dependency
-    from youtube_transcript_api import YouTubeTranscriptApi
-
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore
     IS_YOUTUBE_TRANSCRIPT_CAPABLE = True
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
+except ModuleNotFoundError:
     pass
 
 
