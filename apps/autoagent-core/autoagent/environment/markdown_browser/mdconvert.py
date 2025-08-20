@@ -21,11 +21,6 @@ import pdfminer
 import pdfminer.high_level
 import pptx
 
-try:  # pragma: no cover - optional dependency
-    from docling.document_converter import DocumentConverter as DocLingDocumentConverter
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    DocLingDocumentConverter = None  # type: ignore
-
 # File-format detection
 import puremagic
 import requests
@@ -464,7 +459,9 @@ class PdfConverter(DocumentConverter):
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".pdf":
             return None
-        if DocLingDocumentConverter is None:
+        try:  # pragma: no cover - optional dependency
+            from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+        except ModuleNotFoundError:
             raise FileConversionException("docling is not installed")
         converter = DocLingDocumentConverter()
         result = converter.convert(local_path)
