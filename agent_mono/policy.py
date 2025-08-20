@@ -4,6 +4,7 @@ import json
 import sys
 import threading
 import time
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
@@ -34,15 +35,14 @@ def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
     if set(data.keys()) != {"capabilities"}:
         raise PolicyError("invalid policy format")
     caps = data.get("capabilities", {})
-    if set(caps.keys()) != _CAPABILITY_REGISTRY:
-        missing = _CAPABILITY_REGISTRY - set(caps.keys())
-        extra = set(caps.keys()) - _CAPABILITY_REGISTRY
-        if missing:
-            raise PolicyError(f"missing capabilities: {', '.join(sorted(missing))}")
-        if extra:
-            raise PolicyError(f"unknown capabilities: {', '.join(sorted(extra))}")
+    missing = _CAPABILITY_REGISTRY - set(caps.keys())
+    if missing:
+        raise PolicyError(f"missing capabilities: {', '.join(sorted(missing))}")
     new_caps: Dict[str, Dict[str, Any]] = {}
     for cap, cfg in caps.items():
+        if cap not in _CAPABILITY_REGISTRY:
+            logger.log_event("policy.unknown_capability", capability=cap)
+            continue
         if cfg.get("default") not in {"allow", "deny"}:
             raise PolicyError(f"invalid default for {cap}")
         allowed = [Path(p).resolve() for p in cfg.get("allowed_paths", [])]
@@ -56,7 +56,12 @@ def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _reload_if_needed() -> None:
-    global _MTIME
+    global _MTIME, _PATH
+    path_str = os.environ.get("POLICY_PATH", str(_PATH))
+    path = Path(path_str).resolve()
+    if path != _PATH:
+        _MTIME = 0
+        _PATH = path
     try:
         mtime = _PATH.stat().st_mtime
     except FileNotFoundError as e:

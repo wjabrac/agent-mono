@@ -14,7 +14,7 @@ import os
 
 
 def _env_bool(name: str, default: str) -> bool:
-    return os.environ.get(name, default).lower() in {"1", "true", "yes"}
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 POLICY_ENGINE_ENABLED = _env_bool("POLICY_ENGINE_ENABLED", "true")

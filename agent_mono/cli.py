@@ -13,10 +13,6 @@ def start_execution_plan(instruction: str) -> None:
 def run_agent(instruction: str, *, dry_run: bool = False) -> None:
     """Normalize the instruction and start execution."""
     normalized = instruction.strip()
-    if any(sep in normalized for sep in ("\n", " and ")):
-        raise SystemExit(
-            "Planning is not implemented; provide a single-step instruction."
-        )
     if dry_run:
         print(f"dry run: {normalized}")
         return

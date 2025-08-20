@@ -461,16 +461,12 @@ class PdfConverter(DocumentConverter):
             return None
         try:  # pragma: no cover - optional dependency
             from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+            converter = DocLingDocumentConverter()
+            result = converter.convert(local_path)
+            text_content = result.document.export_to_markdown()
         except ModuleNotFoundError:
-            raise FileConversionException("docling is not installed")
-        converter = DocLingDocumentConverter()
-        result = converter.convert(local_path)
-        text_content = result.document.export_to_markdown()
-        return DocumentConverterResult(
-            title=None,
-            # text_content=pdfminer.high_level.extract_text(local_path),
-            text_content=text_content,
-        )
+            text_content = pdfminer.high_level.extract_text(local_path)
+        return DocumentConverterResult(title=None, text_content=text_content)
 
 
 class DocxConverter(HtmlConverter):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import os
 import time
 from pathlib import Path
 from typing import Dict
@@ -16,7 +17,8 @@ def fs_write_text(path: Path, content: str, timeout: float = 10.0) -> Dict:
         policy.check("fs.write", path=path, source="tools.builtin.fs_write_text")
         original = path.read_text(encoding="utf-8") if path.exists() else ""
         write_text_atomic(path, content)
-        if len(original) + len(content) <= 131072:
+        threshold = int(os.environ.get("FS_WRITE_DIFF_MAX_BYTES", "131072"))
+        if len(original) + len(content) <= threshold:
             diff = "\n".join(
                 difflib.unified_diff(
                     original.splitlines(), content.splitlines(), lineterm=""
@@ -43,6 +45,7 @@ def fs_write_text(path: Path, content: str, timeout: float = 10.0) -> Dict:
             "timeout_s": timeout,
             "path": str(path.expanduser().resolve()),
             "bytes": bytes_written,
+            "diff_max_bytes": threshold,
         },
         "diff": diff,
     }

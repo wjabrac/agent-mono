@@ -7,7 +7,6 @@ from urllib.request import Request, urlopen
 
 _DEFAULT_TYPES = [
     "application/json",
-    "application/+json",
     "application/xml",
     "text/",
 ]

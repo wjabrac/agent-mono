@@ -59,9 +59,9 @@ policy looks like:
 ```
 
 Unknown capabilities are denied, and paths may be constrained via
-`allowed_paths` or `forbidden_paths` entries. The engine reads
-`POLICY_PATH` and `POLICY_ENGINE_ENABLED` from the environment to locate and
-enable the policy file.
+`allowed_paths` or `forbidden_paths` entries. The policy engine is enabled by
+default and reads `POLICY_PATH` and `POLICY_ENGINE_ENABLED` from the environment
+to locate and optionally disable the policy file.
 
 ## Metrics stack
 

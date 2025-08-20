@@ -79,14 +79,14 @@ def test_policy_hot_reload_atomic_swap(tmp_path, monkeypatch):
     assert fs_read(file)["success"]
 
 
-def test_cli_refuses_planning_input_when_planner_missing():
+def test_cli_runs_multi_step_instruction():
     proc = subprocess.run(
         [sys.executable, "-m", "agent_mono.cli", "do this and then that"],
         capture_output=True,
         text=True,
     )
-    assert proc.returncode != 0
-    assert "Planning is not implemented" in (proc.stderr + proc.stdout)
+    assert proc.returncode == 0
+    assert "do this and then that" in proc.stdout
 
 
 def test_fs_write_diff_suppressed_for_large_files(tmp_path, monkeypatch):

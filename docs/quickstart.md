@@ -54,7 +54,7 @@ Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy `.e
 ./docker/gen-env.sh               # generate .env with random secrets
 # or
 cp .env.example .env              # edit values manually
-docker compose -f docker/docker-compose.yml --profile metrics up
+docker compose --profile metrics up
 ```
 
 Grafana listens on port 3001 and Graphite's web UI on port 8083. Both require the
