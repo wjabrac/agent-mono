@@ -17,6 +17,11 @@ pip install --no-deps -e .[http,images]
 The `[http]` extra installs `httpx` for network tools and `[images]` installs
 `Pillow` for image utilities.
 
+Install OpenTelemetry libraries to capture metrics and traces:
+```bash
+pip install opentelemetry-api opentelemetry-sdk
+```
+
 Any Python package manager can be used. The project targets Python 3.10+.
 
 ## Running an instruction
@@ -24,6 +29,9 @@ Any Python package manager can be used. The project targets Python 3.10+.
 ```bash
 python -m agent_mono.cli "list files in /tmp"
 ```
+The command discovers available plugins, plans the steps, and executes the plan
+with policy checks between discovery, planning, and execution. Metrics for each
+phase are written to the local trace database for troubleshooting.
 
 ## Creating a plugin
 

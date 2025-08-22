@@ -38,10 +38,17 @@ For optional network and image plugins install extras:
 ```bash
 pip install --no-deps -e .[http,images]
 ```
+Install OpenTelemetry packages to enable metrics and tracing:
+```bash
+pip install opentelemetry-api opentelemetry-sdk
+```
 ### Run an instruction
 ```bash
 python -m agent_mono.cli "list files in /tmp"
 ```
+The CLI now discovers plugins, generates a plan, and executes it with policy
+checks before each phase. Metrics for discovery, planning, and execution are
+recorded to the local trace store for diagnostics.
 
 ### Create a plugin
 

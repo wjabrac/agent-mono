@@ -7,7 +7,7 @@ import inspect
 import os
 import pkgutil
 import warnings
-from typing import Dict, Any, Callable, Type, Optional
+from typing import Dict, Any, Callable, Type, Optional, List
 
 from pydantic import BaseModel
 
@@ -70,6 +70,12 @@ class _RegistryWrapper:
 
 if _metrics is not None:
     _metrics.registry = _RegistryWrapper()
+
+
+def names() -> List[str]:
+    """Return names of all registered tools."""
+
+    return list(_REGISTRY.keys())
 
 
 def register(tool: ToolSpec) -> None:
