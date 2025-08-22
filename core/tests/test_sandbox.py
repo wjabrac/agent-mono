@@ -27,3 +27,8 @@ def test_sandbox_unsupported_os(monkeypatch):
     monkeypatch.setattr(sandbox.os, "name", "nt")
     with pytest.raises(RuntimeError):
         sandbox.run_in_sandbox(_echo, {})
+
+
+def test_allow_unsafe_env_var(monkeypatch):
+    monkeypatch.setenv("ALLOW_UNSAFE_SANDBOX", "1")
+    assert sandbox.run_in_sandbox(_echo, {}) == {"ok": True}

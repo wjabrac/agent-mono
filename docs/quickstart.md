@@ -61,10 +61,21 @@ export ADVANCED_PLANNING=true            # plan conditionals and loops
 export HITL_DEFAULT=true                 # require human approvals
 ```
 
-These variables activate the planning, security, and observability capabilities. For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+The default `policies.json` denies network access, filesystem writes, and
+subprocess execution. Adjust the file or declare environment variables like
+`ALLOWED_TOOLS` and `FS_SAFE_ROOTS` to permit only the operations you need:
 
-On non-POSIX platforms (e.g., Windows) the sandbox is disabled by default. Set
-`ALLOW_UNSAFE_SANDBOX=1` to bypass isolation, understanding the risks.
+```bash
+export ALLOWED_TOOLS=web_fetch
+export FS_SAFE_ROOTS=$PWD
+```
+
+These variables activate the planning, security, and observability capabilities.
+For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+
+Risky tools run in a sandboxed subprocess on POSIX systems.
+Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation on any platform; on non-POSIX
+systems this variable is required because sandboxing is otherwise unavailable.
 
 ## TypeScript agent
 
@@ -79,7 +90,9 @@ For development guidelines, consult [AGENTS.md](../AGENTS.md).
 
 ## Metrics stack
 
-Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy `.env.example` and edit), then start Graphite and Grafana with the `metrics` profile:
+Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy
+`.env.example` and edit), then start Prometheus, Alertmanager, Grafana, and
+Jaeger with the `metrics` profile:
 
 ```bash
 ./docker/gen-env.sh               # generate .env with random secrets
@@ -88,6 +101,9 @@ cp .env.example .env              # edit values manually
 docker compose -f docker/docker-compose.yml --profile metrics up
 ```
 
-Grafana listens on port 3001 and Graphite's web UI on port 8083. Both require the
-credentials supplied in `.env` and Grafana includes a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to 127.0.0.1 for local access only. For production, place a TLS-terminating proxy with authentication in front of all HTTP services.
+Grafana listens on port 3001, Prometheus on 9090, Alertmanager on 9093, and the
+Jaeger UI on 16686. These services use the credentials supplied in `.env` and
+include a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to
+127.0.0.1 for local access only. For production, place a TLS-terminating proxy
+with authentication in front of all HTTP services.
 
