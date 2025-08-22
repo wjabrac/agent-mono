@@ -19,7 +19,11 @@ pip install --no-deps -e .[http,images]
 ```
 
 ### Policy engine
-Enable and configure:
+
+By default, `policies.json` denies network access, filesystem writes, and
+subprocess execution. Enable the policy engine and configure it to permit only
+the operations your tools require:
+
 ```bash
 export POLICY_ENGINE_ENABLED=true
 export ALLOWED_TOOLS=web_fetch,pdf_text,csv_parse,json_parse,image_info
@@ -27,9 +31,9 @@ export FS_SAFE_ROOTS=$PWD
 export HTTP_RATE_LIMIT_PER_MIN=30
 ```
 
-The sandbox executes risky tools in a subprocess on POSIX systems only. On
-Windows, either avoid risky tools or set `ALLOW_UNSAFE_SANDBOX=1` to run them
-without isolation.
+The sandbox executes risky tools in a subprocess on POSIX systems.
+Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation and run them directly; on
+non-POSIX platforms this variable is required because sandboxing is unsupported.
 
 ### Human-in-the-loop (HITL)
 - Approvals are required for multi-step waves by default. Disable with:

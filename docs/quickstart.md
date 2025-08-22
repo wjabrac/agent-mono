@@ -53,10 +53,21 @@ export ADVANCED_PLANNING=true            # plan conditionals and loops
 export HITL_DEFAULT=true                 # require human approvals
 ```
 
-These variables activate the planning, security, and observability capabilities. For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+The default `policies.json` denies network access, filesystem writes, and
+subprocess execution. Adjust the file or declare environment variables like
+`ALLOWED_TOOLS` and `FS_SAFE_ROOTS` to permit only the operations you need:
 
-On non-POSIX platforms (e.g., Windows) the sandbox is disabled by default. Set
-`ALLOW_UNSAFE_SANDBOX=1` to bypass isolation, understanding the risks.
+```bash
+export ALLOWED_TOOLS=web_fetch
+export FS_SAFE_ROOTS=$PWD
+```
+
+These variables activate the planning, security, and observability capabilities.
+For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+
+Risky tools run in a sandboxed subprocess on POSIX systems.
+Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation on any platform; on non-POSIX
+systems this variable is required because sandboxing is otherwise unavailable.
 
 ## TypeScript agent
 

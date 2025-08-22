@@ -28,6 +28,19 @@ All plugin inputs and outputs are validated with Pydantic models before being
 returned to the agent. See [docs/plugin-security.md](docs/plugin-security.md)
 for guidance on sandbox configuration and assumptions.
 
+### Policy defaults
+
+The runtime ships with a restrictive `policies.json`. Network access,
+filesystem writes, and spawning subprocesses are denied unless explicitly
+allowed. Adjust the policy file or use environment variables to enable only the
+capabilities you require:
+
+```
+export POLICY_ENGINE_ENABLED=true
+export ALLOWED_TOOLS=web_fetch
+export FS_SAFE_ROOTS=$PWD
+```
+
 ## Basic usage
 
 ### Installation
@@ -56,8 +69,9 @@ export ADVANCED_PLANNING=true
 export POLICY_ENGINE_ENABLED=true
 ```
 
-On Windows and other non-POSIX platforms the sandbox is disabled by default.
-Set `ALLOW_UNSAFE_SANDBOX=1` to run risky tools without isolation.
+Risky tools run in a sandboxed subprocess on POSIX systems.
+Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation and execute them directly.
+On non-POSIX platforms the sandbox is otherwise unavailable.
 
 See [docs/quickstart.md](docs/quickstart.md) for more examples.
 
