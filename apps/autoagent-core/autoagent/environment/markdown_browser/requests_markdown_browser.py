@@ -57,6 +57,8 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         Instantiate a new RequestsMarkdownBrowser.
 
         Arguments:
+            local_root: Root directory where browser data is stored locally.
+            workplace_name: Name of the workspace directory within ``local_root``.
             start_page: The page on which the browser starts (default: "about:blank")
             viewport_size: Approximately how many *characters* fit in the viewport. Viewport dimensions are adjusted dynamically to avoid cutting off words (default: 8192).
             downloads_folder: Path to where downloads are saved. If None, downloads are disabled. (default: None)
