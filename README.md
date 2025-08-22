@@ -21,6 +21,13 @@ graph TD
 - Human-in-the-loop approvals.
 - Metrics and tracing via Graphite and Grafana.
 
+## Security
+
+Plugins run inside an isolated subprocess with basic CPU and memory limits.
+All plugin inputs and outputs are validated with Pydantic models before being
+returned to the agent. See [docs/plugin-security.md](docs/plugin-security.md)
+for guidance on sandbox configuration and assumptions.
+
 ## Basic usage
 
 ### Installation
