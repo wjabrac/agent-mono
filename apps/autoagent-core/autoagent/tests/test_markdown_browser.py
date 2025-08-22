@@ -26,5 +26,5 @@ def test_append_ext_deduplicates():
     converter = MarkdownConverter()
     exts = []
     converter._append_ext(exts, ".txt")
-    converter._append_ext(exts, ".txt")
+    converter._append_ext(exts, ".TXT")
     assert exts == [".txt"]
