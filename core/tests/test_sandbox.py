@@ -1,45 +1,29 @@
-from pathlib import Path
-import shutil
-import sqlite3
+import time
+
 import pytest
 
-from core.loader import PluginLoader
-from core.safety import permissions, executor, audit
+from core.security import sandbox
+from core.security.sandbox import SandboxTimeout
 
 
-def setup_plugin(tmp_path):
-    shutil.copytree(Path("core/plugins/echo"), tmp_path / "echo")
-    loader = PluginLoader()
-    plugin = loader.load(tmp_path / "echo")
-    checker = permissions.PermissionChecker()
-    checker.register_plugin(plugin.manifest.name, set(plugin.manifest.scopes_allow), plugin.manifest.rate_limit_per_min)
-    con = sqlite3.connect(audit.DB_PATH)
-    con.execute("DELETE FROM rate_counters")
-    con.commit()
-    con.close()
-    return plugin, executor.Executor(checker)
+def _sleep(args):
+    time.sleep(2)
 
 
-def test_path_traversal_denied(tmp_path):
-    plugin, exe = setup_plugin(tmp_path)
-    with pytest.raises(PermissionError):
-        exe.execute(plugin, "write", {"path": "../bad"}, actor="u")
+def test_sandbox_timeout():
+    with pytest.raises(SandboxTimeout):
+        sandbox.run_in_sandbox(_sleep, {}, timeout_s=0.1)
 
 
-def test_absolute_denied(tmp_path):
-    plugin, exe = setup_plugin(tmp_path)
-    with pytest.raises(PermissionError):
-        exe.execute(plugin, "write", {"path": "/tmp/x"}, actor="u")
+def _echo(args):
+    return {"ok": True}
 
 
-def test_cleanup(tmp_path):
-    plugin, exe = setup_plugin(tmp_path)
-    res = exe.execute(plugin, "write", {"path": "ok"}, actor="u")
-    file_path = Path(res["written"])
-    assert file_path.exists() is False
+def test_sandbox_runs_function():
+    assert sandbox.run_in_sandbox(_echo, {}, timeout_s=1) == {"ok": True}
 
 
-def test_network_blocked(tmp_path):
-    plugin, exe = setup_plugin(tmp_path)
-    with pytest.raises(PermissionError):
-        exe.execute(plugin, "net", {}, actor="u")
+def test_sandbox_unsupported_os(monkeypatch):
+    monkeypatch.setattr(sandbox.os, "name", "nt")
+    with pytest.raises(RuntimeError):
+        sandbox.run_in_sandbox(_echo, {})

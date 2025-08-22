@@ -9,6 +9,7 @@ class MicrotoolSpec(BaseModel):
     description: str = ""
     tags: List[str] = Field(default_factory=list)
     input_model: Optional[type[BaseModel]] = None
+    output_model: Optional[type[BaseModel]] = None
 
 
 def microtool(
@@ -17,6 +18,7 @@ def microtool(
     description: str = "",
     tags: List[str] | None = None,
     input_model: Optional[type[BaseModel]] = None,
+    output_model: Optional[type[BaseModel]] = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         model = input_model
@@ -37,7 +39,13 @@ def microtool(
                 fields[param_name] = (ann, default)
             if fields:
                 model = create_model(f"{fn.__name__.title()}Input", **fields)  # type: ignore
-        mt_spec = MicrotoolSpec(name=name, description=description, tags=tags or [], input_model=model)
+        mt_spec = MicrotoolSpec(
+            name=name,
+            description=description,
+            tags=tags or [],
+            input_model=model,
+            output_model=output_model,
+        )
         setattr(fn, "_microtool_spec", mt_spec)
         # Defer manifest entry until discovery so file path is known
         return fn
@@ -66,4 +74,6 @@ def build_toolspec_from_microtool(fn: Callable[..., Any]) -> ToolSpec:
             res = fn(**kwargs)
             return res if isinstance(res, dict) else {"result": res}
 
-    return ToolSpec(name=mt.name, input_model=model, run=_run)
+    return ToolSpec(
+        name=mt.name, input_model=model, output_model=mt.output_model, run=_run
+    )

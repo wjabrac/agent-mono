@@ -34,6 +34,10 @@ for guidance on sandbox configuration and assumptions.
 ```bash
 pip install --no-deps -e .
 ```
+For optional network and image plugins install extras:
+```bash
+pip install --no-deps -e .[http,images]
+```
 ### Run an instruction
 ```bash
 python -m agent_mono.cli "list files in /tmp"
@@ -51,6 +55,9 @@ agent create plugin my_plugin
 export ADVANCED_PLANNING=true
 export POLICY_ENGINE_ENABLED=true
 ```
+
+On Windows and other non-POSIX platforms the sandbox is disabled by default.
+Set `ALLOW_UNSAFE_SANDBOX=1` to run risky tools without isolation.
 
 See [docs/quickstart.md](docs/quickstart.md) for more examples.
 
