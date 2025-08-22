@@ -57,19 +57,40 @@ services:
           cpus: "1.0"
           memory: 1g
 
-  graphite:
-    image: graphiteapp/graphite-statsd:1.1.10-3
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    profiles: ["metrics"]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["metrics"]
+    ports: ["127.0.0.1:9093:9093"]
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
     profiles: ["metrics"]
     ports:
-      - "127.0.0.1:8083:80"
-      - "127.0.0.1:2003:2003"
-      - "127.0.0.1:2004:2004"
-      - "127.0.0.1:2023:2023"
-      - "127.0.0.1:2024:2024"
-      - "127.0.0.1:8125:8125/udp"
-      - "127.0.0.1:8126:8126"
-    volumes:
-      - graphite_data:/opt/graphite/storage
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
     restart: unless-stopped
     deploy:
       resources:
@@ -80,7 +101,7 @@ services:
   grafana:
     image: grafana/grafana:10.4.6
     profiles: ["metrics"]
-    depends_on: [graphite]
+    depends_on: [prometheus, jaeger]
     ports: ["127.0.0.1:3001:3000"]
     environment:
       - GF_SECURITY_ADMIN_USER=grafana_admin
@@ -288,5 +309,4 @@ volumes:
   mariadb_data:
   wp_plugins:
   mautic_data:
-  graphite_data:
   grafana_data:

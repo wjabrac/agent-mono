@@ -82,7 +82,9 @@ For development guidelines, consult [AGENTS.md](../AGENTS.md).
 
 ## Metrics stack
 
-Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy `.env.example` and edit), then start Graphite and Grafana with the `metrics` profile:
+Generate a `.env` with strong credentials (run `./docker/gen-env.sh` or copy
+`.env.example` and edit), then start Prometheus, Alertmanager, Grafana, and
+Jaeger with the `metrics` profile:
 
 ```bash
 ./docker/gen-env.sh               # generate .env with random secrets
@@ -91,6 +93,9 @@ cp .env.example .env              # edit values manually
 docker compose -f docker/docker-compose.yml --profile metrics up
 ```
 
-Grafana listens on port 3001 and Graphite's web UI on port 8083. Both require the
-credentials supplied in `.env` and Grafana includes a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to 127.0.0.1 for local access only. For production, place a TLS-terminating proxy with authentication in front of all HTTP services.
+Grafana listens on port 3001, Prometheus on 9090, Alertmanager on 9093, and the
+Jaeger UI on 16686. These services use the credentials supplied in `.env` and
+include a sample alert rule. Postgres (5432) and MariaDB (3306) are bound to
+127.0.0.1 for local access only. For production, place a TLS-terminating proxy
+with authentication in front of all HTTP services.
 
