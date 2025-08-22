@@ -18,7 +18,14 @@ import mammoth
 import markdownify
 import pandas as pd
 import pptx
-import pdfminer.high_level
+
+try:
+    import pdfminer.high_level
+
+    IS_PDFMINER_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    pdfminer = None  # type: ignore[assignment]
+    IS_PDFMINER_AVAILABLE = False
 
 try:
     from docling.document_converter import DocumentConverter as DocLingDocumentConverter
@@ -507,8 +514,12 @@ class PdfConverter(DocumentConverter):
             converter = DocLingDocumentConverter()
             result = converter.convert(local_path)
             text_content = result.document.export_to_markdown()
-        else:
+        elif IS_PDFMINER_AVAILABLE:
             text_content = pdfminer.high_level.extract_text(local_path)
+        else:  # pragma: no cover - defensive
+            raise UnsupportedFormatException(
+                "Could not convert PDF: missing docling and pdfminer"
+            )
 
         return DocumentConverterResult(
             title=None,
@@ -1142,7 +1153,7 @@ class MarkdownConverter:
     def _append_ext(self, extensions, ext):
         if ext is None:
             return
-        ext = ext.strip()
+        ext = ext.strip().lower()
         if ext == "":
             return
         if ext not in extensions:
