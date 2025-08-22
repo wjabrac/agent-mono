@@ -14,6 +14,9 @@ Include extras to enable plugin dependencies:
 pip install --no-deps -e .[http,images]
 ```
 
+The `[http]` extra installs `httpx` for network tools and `[images]` installs
+`Pillow` for image utilities.
+
 Any Python package manager can be used. The project targets Python 3.10+.
 
 ## Running an instruction
@@ -47,6 +50,9 @@ export HITL_DEFAULT=true                 # require human approvals
 ```
 
 These variables activate the planning, security, and observability capabilities. For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
+
+On non-POSIX platforms (e.g., Windows) the sandbox is disabled by default. Set
+`ALLOW_UNSAFE_SANDBOX=1` to bypass isolation, understanding the risks.
 
 ## TypeScript agent
 

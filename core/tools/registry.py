@@ -10,11 +10,41 @@ import warnings
 from typing import Dict, Any, Callable, Type, Optional
 
 from pydantic import BaseModel
-from opentelemetry import trace as _trace
-from core.observability import metrics as _metrics
-from core.observability.metrics import record_tool_request
 
-_tracer = _trace.get_tracer("core.tools.registry", "0.1.0")
+# --- observability (optional) ---
+try:
+    from opentelemetry import trace as _trace  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - optional
+
+    class _NoSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def set_attribute(self, *args, **kwargs):  # pragma: no cover - no-op
+            pass
+
+    class _NoTracer:
+        def start_as_current_span(self, *args, **kwargs):  # pragma: no cover - no-op
+            return _NoSpan()
+
+    _trace = type("trace", (), {"get_tracer": lambda *a, **k: _NoTracer()})()  # type: ignore
+
+try:
+    from core.observability import metrics as _metrics  # type: ignore
+except Exception:  # pragma: no cover - optional
+    _metrics = None  # type: ignore
+try:
+    from core.observability.metrics import record_tool_request  # type: ignore
+except Exception:  # pragma: no cover - optional
+
+    def record_tool_request(*args, **kwargs):  # type: ignore
+        return None
+
+
+_tracer = _trace.get_tracer("core.tools.registry", "0.1.0")  # no-op if shimmed
 
 
 class ToolSpec(BaseModel):
@@ -22,6 +52,7 @@ class ToolSpec(BaseModel):
 
     name: str
     input_model: Optional[Type[BaseModel]] = None
+    output_model: Optional[Type[BaseModel]] = None
     run: Callable[[Dict[str, Any]], Dict[str, Any]]
 
 
@@ -37,7 +68,8 @@ class _RegistryWrapper:
         return _REGISTRY[name]
 
 
-_metrics.registry = _RegistryWrapper()
+if _metrics is not None:
+    _metrics.registry = _RegistryWrapper()
 
 
 def register(tool: ToolSpec) -> None:
@@ -45,9 +77,14 @@ def register(tool: ToolSpec) -> None:
 
     with _tracer.start_as_current_span("tool.register") as span:
         span.set_attribute("tool.name", tool.name)
-        if tool.name in _REGISTRY:
-            warnings.warn("duplicate tool registration", UserWarning)
+        prev = _REGISTRY.get(tool.name)
+        if prev is not None:
+            warnings.warn(f"duplicate tool registration: {tool.name}", UserWarning)
         _REGISTRY[tool.name] = tool
+        try:
+            record_tool_request("tool_registered", {"tool.name": tool.name})
+        except Exception:  # pragma: no cover - optional metrics
+            pass
 
 
 def get(name: str) -> ToolSpec:
@@ -56,7 +93,10 @@ def get(name: str) -> ToolSpec:
     with _tracer.start_as_current_span("tool.get") as span:
         span.set_attribute("tool.name", name)
         exists = name in _REGISTRY
-        record_tool_request(name, exists)
+        try:
+            record_tool_request(name, exists)
+        except Exception:  # pragma: no cover - optional metrics
+            pass
         span.set_attribute("tool.found", exists)
         if not exists:
             raise KeyError(f"tool not found: {name}")
@@ -89,13 +129,17 @@ def discover(package: str = "plugins") -> None:
                         _log_discovery_error(path, e)
                         continue
                     from core.tools.microtool import build_toolspec_from_microtool
+
                     for _, obj in inspect.getmembers(mod):
                         if isinstance(obj, ToolSpec):
                             register(obj)
                         elif callable(obj) and hasattr(obj, "_microtool_spec"):
                             register(build_toolspec_from_microtool(obj))
             return
-        pkg = importlib.import_module(package)
+        try:
+            pkg = importlib.import_module(package)
+        except ModuleNotFoundError:
+            return
         for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
             mod_full = f"{package}.{modname}"
             try:
@@ -104,6 +148,7 @@ def discover(package: str = "plugins") -> None:
                 _log_discovery_error(mod_full, e)
                 continue
             from core.tools.microtool import build_toolspec_from_microtool
+
             for _, obj in inspect.getmembers(mod):
                 if isinstance(obj, ToolSpec):
                     register(obj)

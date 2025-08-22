@@ -98,18 +98,26 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
             self._requests_get_kwargs = requests_get_kwargs
 
         self._find_on_page_query: Union[str, None] = None
-        self._find_on_page_last_result: Union[int, None] = None  # Location of the last result
+        self._find_on_page_last_result: Union[int, None] = (
+            None  # Location of the last result
+        )
 
     @property
     def address(self) -> str:
         """Return the address of the current page."""
         return self.history[-1][0]
+
     def _convert_docker_to_local(self, path: str) -> str:
-        assert self.docker_workplace in path, f"The path must be a absolute path from `{self.docker_workplace}/` directory"
+        assert (
+            self.docker_workplace in path
+        ), f"The path must be a absolute path from `{self.docker_workplace}/` directory"
         local_path = path.replace(self.docker_workplace, self.local_workplace)
         return local_path
+
     def _convert_local_to_docker(self, path: str) -> str:
-        assert self.local_workplace in path, f"The path must be a absolute path from `{self.local_workplace}/` directory"
+        assert (
+            self.local_workplace in path
+        ), f"The path must be a absolute path from `{self.local_workplace}/` directory"
         docker_path = path.replace(self.local_workplace, self.docker_workplace)
         return docker_path
 
@@ -195,7 +203,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
 
     def page_down(self) -> None:
         """Move the viewport down one page, if possible."""
-        self.viewport_current_page = min(self.viewport_current_page + 1, len(self.viewport_pages) - 1)
+        self.viewport_current_page = min(
+            self.viewport_current_page + 1, len(self.viewport_pages) - 1
+        )
 
     def page_up(self) -> None:
         """Move the viewport up one page, if possible."""
@@ -210,7 +220,10 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
 
         # Did we get here via a previous find_on_page search with the same query?
         # If so, map to find_next
-        if query == self._find_on_page_query and self.viewport_current_page == self._find_on_page_last_result:
+        if (
+            query == self._find_on_page_query
+            and self.viewport_current_page == self._find_on_page_last_result
+        ):
             return self.find_next()
 
         # Ok it's a new search start from the current viewport
@@ -238,7 +251,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
             if starting_viewport >= len(self.viewport_pages):
                 starting_viewport = 0
 
-        viewport_match = self._find_next_viewport(self._find_on_page_query, starting_viewport)
+        viewport_match = self._find_next_viewport(
+            self._find_on_page_query, starting_viewport
+        )
         if viewport_match is None:
             self._find_on_page_last_result = None
             return None
@@ -247,7 +262,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
             self._find_on_page_last_result = viewport_match
             return self.viewport
 
-    def _find_next_viewport(self, query: Optional[str], starting_viewport: int) -> Union[int, None]:
+    def _find_next_viewport(
+        self, query: Optional[str], starting_viewport: int
+    ) -> Union[int, None]:
         """Search for matches between the starting viewport looping when reaching the end."""
 
         if query is None:
@@ -256,7 +273,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         # Normalize the query, and convert to a regular expression
         nquery = re.sub(r"\*", "__STAR__", query)
         nquery = " " + (" ".join(re.split(r"\W+", nquery))).strip() + " "
-        nquery = nquery.replace(" __STAR__ ", "__STAR__ ")  # Merge isolated stars with prior word
+        nquery = nquery.replace(
+            " __STAR__ ", "__STAR__ "
+        )  # Merge isolated stars with prior word
         nquery = nquery.replace("__STAR__", ".*").lower()
 
         if nquery.strip() == "":
@@ -270,8 +289,10 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
             bounds = self.viewport_pages[i]
             content = self.page_content[bounds[0] : bounds[1]]
 
-            # TODO: Remove markdown links and images
-            ncontent = " " + (" ".join(re.split(r"\W+", content))).strip().lower() + " "
+            # Strip markdown links and images before searching
+            clean = re.sub(r"!\[[^\]]*\]\([^\)]*\)", " ", content)
+            clean = re.sub(r"(\[[^\]]+\])\([^\)]*\)", r"\1", clean)
+            ncontent = " " + (" ".join(re.split(r"\W+", clean))).strip().lower() + " "
             if re.search(nquery, ncontent):
                 return i
 
@@ -301,7 +322,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         while start_idx < len(self._page_content):
             end_idx = min(start_idx + self.viewport_size, len(self._page_content))  # type: ignore[operator]
             # Adjust to end on a space
-            while end_idx < len(self._page_content) and self._page_content[end_idx - 1] not in [" ", "\t", "\r", "\n"]:
+            while end_idx < len(self._page_content) and self._page_content[
+                end_idx - 1
+            ] not in [" ", "\t", "\r", "\n"]:
                 end_idx += 1
             self.viewport_pages.append((start_idx, end_idx))
             start_idx = end_idx
@@ -325,9 +348,10 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         try:
             if url.startswith("file://"):
                 download_path = os.path.normcase(os.path.normpath(unquote(url[7:])))
-                if os.path.isdir(download_path):  # TODO: Fix markdown_converter types
-                    res = self._markdown_converter.convert_stream(  # type: ignore
-                        io.StringIO(self._fetch_local_dir(download_path)), file_extension=".html"
+                if os.path.isdir(download_path):
+                    res = self._markdown_converter.convert_stream(
+                        io.StringIO(self._fetch_local_dir(download_path)),
+                        file_extension=".html",
                     )
                     self.page_title = res.title
                     self._set_page_content(
@@ -342,13 +366,13 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
                 if session is None:
                     session = self._requests_session
 
-                _get_kwargs: Dict[str, Any] = {}  # TODO: Deal with kwargs
-                _get_kwargs.update(self._requests_get_kwargs)
+                get_kwargs: Dict[str, Any] = {}
+                get_kwargs.update(self._requests_get_kwargs)
                 if requests_get_kwargs is not None:
-                    _get_kwargs.update(requests_get_kwargs)
-                _get_kwargs["stream"] = True
+                    get_kwargs.update(requests_get_kwargs)
+                get_kwargs["stream"] = True
 
-                response = session.get(url, **_get_kwargs)
+                response = session.get(url, **get_kwargs)
                 response.raise_for_status()
 
                 # If the HTTP request was successful
@@ -364,7 +388,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
                     # Was a downloads folder configured?
                     if self.downloads_folder is None:
                         self.page_title = "Error 400"
-                        self._set_page_content("## Error 400\n\nClient does not support downloads")
+                        self._set_page_content(
+                            "## Error 400\n\nClient does not support downloads"
+                        )
                         return
 
                     assert self.downloads_folder is not None
@@ -372,15 +398,21 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
                     # Try producing a safe filename
                     fname: str = ""
                     try:
-                        fname = pathvalidate.sanitize_filename(os.path.basename(urlparse(url).path)).strip()
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        fname = pathvalidate.sanitize_filename(
+                            os.path.basename(urlparse(url).path)
+                        ).strip()
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                         suffix = 0
                         while os.path.exists(download_path) and suffix < 1000:
                             suffix += 1
                             base, ext = os.path.splitext(fname)
                             new_fname = f"{base}__{suffix}{ext}"
-                            download_path = os.path.abspath(os.path.join(self.downloads_folder, new_fname))
+                            download_path = os.path.abspath(
+                                os.path.join(self.downloads_folder, new_fname)
+                            )
 
                     except NameError:
                         pass
@@ -391,7 +423,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
                         if extension is None:
                             extension = ".download"
                         fname = str(uuid.uuid4()) + extension
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                     # Open a file for writing
                     with open(download_path, "wb") as fh:
@@ -404,17 +438,23 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
 
         except UnsupportedFormatException:
             self.page_title = "Download complete."
-            self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+            self._set_page_content(
+                f"# Download complete\n\nSaved file to '{download_path}'"
+            )
         except FileConversionException:
             self.page_title = "Download complete."
-            self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+            self._set_page_content(
+                f"# Download complete\n\nSaved file to '{download_path}'"
+            )
         except FileNotFoundError:
             self.page_title = "Error 404"
             self._set_page_content(f"## Error 404\n\nFile not found: {download_path}")
         except requests.exceptions.RequestException:
             if response is None:
                 self.page_title = "Request Exception"
-                self._set_page_content("## Unhandled Request Exception:\n\n" + traceback.format_exc())
+                self._set_page_content(
+                    "## Unhandled Request Exception:\n\n" + traceback.format_exc()
+                )
             else:
                 self.page_title = f"Error {response.status_code}"
 
@@ -423,10 +463,14 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
                 if "text/html" in content_type.lower():
                     res = self._markdown_converter.convert(response)
                     self.page_title = f"Error {response.status_code}"
-                    self._set_page_content(f"## Error {response.status_code}\n\n{res.text_content}")
+                    self._set_page_content(
+                        f"## Error {response.status_code}\n\n{res.text_content}"
+                    )
                 else:
                     text = ""
-                    for chunk in response.iter_content(chunk_size=512, decode_unicode=True):
+                    for chunk in response.iter_content(
+                        chunk_size=512, decode_unicode=True
+                    ):
                         text += chunk
                     self.page_title = f"Error {response.status_code}"
                     self._set_page_content(f"## Error {response.status_code}\n\n{text}")
@@ -464,7 +508,9 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
             full_path = os.path.normpath(os.path.join(local_path, entry))
             full_path_uri = pathlib.Path(full_path).as_uri()
             size = ""
-            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(full_path)).strftime("%Y-%m-%d %H:%M")
+            mtime = datetime.datetime.fromtimestamp(
+                os.path.getmtime(full_path)
+            ).strftime("%Y-%m-%d %H:%M")
 
             if os.path.isdir(full_path):
                 entry = entry + os.path.sep

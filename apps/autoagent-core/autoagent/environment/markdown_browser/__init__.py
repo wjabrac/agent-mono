@@ -1,8 +1,7 @@
 from .abstract_markdown_browser import AbstractMarkdownBrowser
 from .markdown_search import AbstractMarkdownSearch, BingMarkdownSearch
 
-# TODO: Fix mdconvert
-from .mdconvert import (  # type: ignore
+from .mdconvert import (
     DocumentConverterResult,
     FileConversionException,
     MarkdownConverter,

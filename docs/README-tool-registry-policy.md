@@ -5,6 +5,10 @@
 export TOOL_HOT_RELOAD=true
 export REMOTE_TOOLS_CONFIG=/path/to/tools.json
 ```
+Install extras for network and image plugins:
+```bash
+pip install --no-deps -e .[http,images]
+```
 `tools.json` example:
 ```json
 {
@@ -22,6 +26,10 @@ export ALLOWED_TOOLS=web_fetch,pdf_text,csv_parse,json_parse,image_info
 export FS_SAFE_ROOTS=$PWD
 export HTTP_RATE_LIMIT_PER_MIN=30
 ```
+
+The sandbox executes risky tools in a subprocess on POSIX systems only. On
+Windows, either avoid risky tools or set `ALLOW_UNSAFE_SANDBOX=1` to run them
+without isolation.
 
 ### Human-in-the-loop (HITL)
 - Approvals are required for multi-step waves by default. Disable with:

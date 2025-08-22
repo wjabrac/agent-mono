@@ -17,10 +17,16 @@ from urllib.parse import parse_qs, quote, unquote, urlparse, urlunparse
 import mammoth
 import markdownify
 import pandas as pd
-import pdfminer
-import pdfminer.high_level
 import pptx
-from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+import pdfminer.high_level
+
+try:
+    from docling.document_converter import DocumentConverter as DocLingDocumentConverter
+
+    IS_DOCLING_AVAILABLE = True
+except ModuleNotFoundError:
+    DocLingDocumentConverter = None  # type: ignore[assignment]
+    IS_DOCLING_AVAILABLE = False
 
 # File-format detection
 import puremagic
@@ -28,6 +34,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # Optional Transcription support
+IS_AUDIO_TRANSCRIPTION_CAPABLE = False
 try:
     import pydub
     import speech_recognition as sr
@@ -37,6 +44,7 @@ except ModuleNotFoundError:
     pass
 
 # Optional YouTube transcription support
+IS_YOUTUBE_TRANSCRIPT_CAPABLE = False
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -114,7 +122,11 @@ class _CustomMarkdownify(markdownify.MarkdownConverter):
         if self.options["default_title"] and not title:
             title = href
         title_part = ' "%s"' % title.replace('"', r"\"") if title else ""
-        return "%s[%s](%s%s)%s" % (prefix, text, href, title_part, suffix) if href else text
+        return (
+            "%s[%s](%s%s)%s" % (prefix, text, href, title_part, suffix)
+            if href
+            else text
+        )
 
     def convert_img(self, el: Any, text: str, convert_as_inline: bool) -> str:
         """Same as usual converter, but removes data URIs"""
@@ -123,7 +135,10 @@ class _CustomMarkdownify(markdownify.MarkdownConverter):
         src = el.attrs.get("src", None) or ""
         title = el.attrs.get("title", None) or ""
         title_part = ' "%s"' % title.replace('"', r"\"") if title else ""
-        if convert_as_inline and el.parent.name not in self.options["keep_inline_images_in"]:
+        if (
+            convert_as_inline
+            and el.parent.name not in self.options["keep_inline_images_in"]
+        ):
             return alt
 
         # Remove dataURIs
@@ -147,16 +162,23 @@ class DocumentConverterResult:
 class DocumentConverter:
     """Abstract superclass of all DocumentConverters."""
 
-    def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
+        """Convert ``local_path`` to Markdown if supported."""
         raise NotImplementedError()
 
 
 class PlainTextConverter(DocumentConverter):
     """Anything with content type text/plain"""
 
-    def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Guess the content type from any file extension that might be around
-        content_type, _ = mimetypes.guess_type("__placeholder" + kwargs.get("file_extension", ""))
+        content_type, _ = mimetypes.guess_type(
+            "__placeholder" + kwargs.get("file_extension", "")
+        )
 
         # Only accept text files
         if content_type is None:
@@ -176,7 +198,9 @@ class PlainTextConverter(DocumentConverter):
 class HtmlConverter(DocumentConverter):
     """Anything with content type text/html"""
 
-    def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not html
         extension = kwargs.get("file_extension", "")
         if extension.lower() not in [".html", ".htm"]:
@@ -188,7 +212,7 @@ class HtmlConverter(DocumentConverter):
 
         return result
 
-    def _convert(self, html_content: str) -> Union[None, DocumentConverterResult]:
+    def _convert(self, html_content: str) -> Optional[DocumentConverterResult]:
         """Helper function that converts and HTML string."""
 
         # Parse the string
@@ -209,14 +233,17 @@ class HtmlConverter(DocumentConverter):
         assert isinstance(webpage_text, str)
 
         return DocumentConverterResult(
-            title=None if soup.title is None else soup.title.string, text_content=webpage_text
+            title=None if soup.title is None else soup.title.string,
+            text_content=webpage_text,
         )
 
 
 class WikipediaConverter(DocumentConverter):
     """Handle Wikipedia pages separately, focusing only on the main document content."""
 
-    def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not Wikipedia
         extension = kwargs.get("file_extension", "")
         if extension.lower() not in [".html", ".htm"]:
@@ -248,7 +275,9 @@ class WikipediaConverter(DocumentConverter):
                 assert isinstance(main_title, str)
 
             # Convert the page
-            webpage_text = f"# {main_title}\n\n" + _CustomMarkdownify().convert_soup(body_elm)
+            webpage_text = f"# {main_title}\n\n" + _CustomMarkdownify().convert_soup(
+                body_elm
+            )
         else:
             webpage_text = _CustomMarkdownify().convert_soup(soup)
 
@@ -261,7 +290,9 @@ class WikipediaConverter(DocumentConverter):
 class YouTubeConverter(DocumentConverter):
     """Handle YouTube specially, focusing on the video title, description, and transcript."""
 
-    def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not YouTube
         extension = kwargs.get("file_extension", "")
         if extension.lower() not in [".html", ".htm"]:
@@ -269,6 +300,9 @@ class YouTubeConverter(DocumentConverter):
         url = kwargs.get("url", "")
         if not url.startswith("https://www.youtube.com/watch?"):
             return None
+
+        title: Optional[str] = None
+        transcript_text = ""
 
         # Parse the file
         soup = None
@@ -305,8 +339,6 @@ class YouTubeConverter(DocumentConverter):
         webpage_text = "# YouTube\n"
 
         title = self._get(metadata, ["title", "og:title", "name"])  # type: ignore
-        assert isinstance(title, str)
-
         if title:
             webpage_text += f"\n## {title}\n"
 
@@ -331,7 +363,6 @@ class YouTubeConverter(DocumentConverter):
             webpage_text += f"\n### Description\n{description}\n"
 
         if IS_YOUTUBE_TRANSCRIPT_CAPABLE:
-            transcript_text = ""
             parsed_url = urlparse(url)  # type: ignore
             params = parse_qs(parsed_url.query)  # type: ignore
             if "v" in params:
@@ -349,34 +380,39 @@ class YouTubeConverter(DocumentConverter):
             if transcript_text:
                 webpage_text += f"\n### Transcript\n{transcript_text}\n"
 
-        title = title if title else soup.title.string
-        assert isinstance(title, str)
+        title = title or soup.title.string
 
         return DocumentConverterResult(
             title=title,
             text_content=webpage_text,
         )
 
-    def _get(self, metadata: Dict[str, str], keys: List[str], default: Union[str, None] = None) -> Union[str, None]:
+    def _get(
+        self,
+        metadata: Dict[str, str],
+        keys: List[str],
+        default: Union[str, None] = None,
+    ) -> Union[str, None]:
         for k in keys:
             if k in metadata:
                 return metadata[k]
         return default
 
-    def _findKey(self, json: Any, key: str) -> Union[str, None]:  # TODO: Fix json type
-        if isinstance(json, list):
-            for elm in json:
+    def _findKey(
+        self, json_data: Union[Dict[str, Any], List[Any]], key: str
+    ) -> Optional[str]:
+        if isinstance(json_data, list):
+            for elm in json_data:
                 ret = self._findKey(elm, key)
                 if ret is not None:
                     return ret
-        elif isinstance(json, dict):
-            for k in json:
-                if k == key:
-                    return json[k]
-                else:
-                    ret = self._findKey(json[k], key)
-                    if ret is not None:
-                        return ret
+        elif isinstance(json_data, dict):
+            for k, v in json_data.items():
+                if k == key and isinstance(v, str):
+                    return v
+                ret = self._findKey(v, key)
+                if ret is not None:
+                    return ret
         return None
 
 
@@ -386,7 +422,9 @@ class BingSerpConverter(DocumentConverter):
     NOTE: It is better to use the Bing API
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a Bing SERP
         extension = kwargs.get("file_extension", "")
         if extension.lower() not in [".html", ".htm"]:
@@ -423,7 +461,9 @@ class BingSerpConverter(DocumentConverter):
                 # The destination is contained in the u parameter,
                 # but appears to be base64 encoded, with some prefix
                 if "u" in qs:
-                    u = qs["u"][0][2:].strip() + "=="  # Python 3 doesn't care about extra padding
+                    u = (
+                        qs["u"][0][2:].strip() + "=="
+                    )  # Python 3 doesn't care about extra padding
 
                     try:
                         # RFC 4648 / Base64URL" variant, which uses "-" and "_"
@@ -438,7 +478,10 @@ class BingSerpConverter(DocumentConverter):
             lines = [line.strip() for line in re.split(r"\n+", md_result)]
             results.append("\n".join([line for line in lines if len(line) > 0]))
 
-        webpage_text = f"## A Bing search for '{query}' found the following results:\n\n" + "\n\n".join(results)
+        webpage_text = (
+            f"## A Bing search for '{query}' found the following results:\n\n"
+            + "\n\n".join(results)
+        )
 
         return DocumentConverterResult(
             title=None if soup.title is None else soup.title.string,
@@ -451,18 +494,25 @@ class PdfConverter(DocumentConverter):
     Converts PDFs to Markdown. Most style information is ignored, so the results are essentially plain-text.
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a PDF
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".pdf":
             return None
-        converter = DocLingDocumentConverter()
-        result = converter.convert(local_path)
-        text_content = result.document.export_to_markdown()
+
+        text_content = ""
+        if IS_DOCLING_AVAILABLE and DocLingDocumentConverter is not None:
+            converter = DocLingDocumentConverter()
+            result = converter.convert(local_path)
+            text_content = result.document.export_to_markdown()
+        else:
+            text_content = pdfminer.high_level.extract_text(local_path)
+
         return DocumentConverterResult(
             title=None,
-            # text_content=pdfminer.high_level.extract_text(local_path),
-            text_content=text_content
+            text_content=text_content,
         )
 
 
@@ -471,7 +521,9 @@ class DocxConverter(HtmlConverter):
     Converts DOCX files to Markdown. Style information (e.g.m headings) and tables are preserved where possible.
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a DOCX
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".docx":
@@ -491,7 +543,9 @@ class XlsxConverter(HtmlConverter):
     Converts XLSX files to Markdown, with each sheet presented as a separate Markdown table.
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a XLSX
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".xlsx":
@@ -515,7 +569,9 @@ class PptxConverter(HtmlConverter):
     Converts PPTX files to Markdown. Supports heading, tables and images with alt text.
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a PPTX
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".pptx":
@@ -543,7 +599,13 @@ class PptxConverter(HtmlConverter):
 
                     # A placeholder name
                     filename = re.sub(r"\W", "", shape.name) + ".jpg"
-                    md_content += "\n![" + (alt_text if alt_text else shape.name) + "](" + filename + ")\n"
+                    md_content += (
+                        "\n!["
+                        + (alt_text if alt_text else shape.name)
+                        + "]("
+                        + filename
+                        + ")\n"
+                    )
 
                 # Tables
                 if self._is_table(shape):
@@ -559,7 +621,9 @@ class PptxConverter(HtmlConverter):
                         html_table += "</tr>"
                         first_row = False
                     html_table += "</table></body></html>"
-                    md_content += "\n" + self._convert(html_table).text_content.strip() + "\n"
+                    md_content += (
+                        "\n" + self._convert(html_table).text_content.strip() + "\n"
+                    )
 
                 # Text areas
                 elif shape.has_text_frame:
@@ -607,7 +671,9 @@ class MediaConverter(DocumentConverter):
             return None
         else:
             try:
-                result = subprocess.run([exiftool, "-json", local_path], capture_output=True, text=True).stdout
+                result = subprocess.run(
+                    [exiftool, "-json", local_path], capture_output=True, text=True
+                ).stdout
                 return json.loads(result)[0]
             except Exception:
                 return None
@@ -618,7 +684,9 @@ class WavConverter(MediaConverter):
     Converts WAV files to markdown via extraction of metadata (if `exiftool` is installed), and speech transcription (if `speech_recognition` is installed).
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a XLSX
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".wav":
@@ -652,7 +720,9 @@ class WavConverter(MediaConverter):
                     "[No speech detected]" if transcript == "" else transcript
                 )
             except Exception:
-                md_content += "\n\n### Audio Transcript:\nError. Could not transcribe this audio."
+                md_content += (
+                    "\n\n### Audio Transcript:\nError. Could not transcribe this audio."
+                )
 
         return DocumentConverterResult(
             title=None,
@@ -671,7 +741,9 @@ class Mp3Converter(WavConverter):
     Converts MP3 files to markdown via extraction of metadata (if `exiftool` is installed), and speech transcription (if `speech_recognition` AND `pydub` are installed).
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a MP3
         extension = kwargs.get("file_extension", "")
         if extension.lower() != ".mp3":
@@ -732,7 +804,9 @@ class ImageConverter(MediaConverter):
     Converts images to markdown via extraction of metadata (if `exiftool` is installed), OCR (if `easyocr` is installed), and description via a multimodal LLM (if an mlm_client is configured).
     """
 
-    def convert(self, local_path, **kwargs) -> Union[None, DocumentConverterResult]:
+    def convert(
+        self, local_path: str, **kwargs: Unpack[ConvertOptions]
+    ) -> Optional[DocumentConverterResult]:
         # Bail if not a XLSX
         extension = kwargs.get("file_extension", "")
         if extension.lower() not in [".jpg", ".jpeg", ".png"]:
@@ -765,7 +839,11 @@ class ImageConverter(MediaConverter):
             md_content += (
                 "\n# Description:\n"
                 + self._get_mlm_description(
-                    local_path, extension, mlm_client, mlm_model, prompt=kwargs.get("mlm_prompt")
+                    local_path,
+                    extension,
+                    mlm_client,
+                    mlm_model,
+                    prompt=kwargs.get("mlm_prompt"),
                 ).strip()
                 + "\n"
             )
@@ -868,7 +946,11 @@ class MarkdownConverter:
 
         # Local path or url
         if isinstance(source, str):
-            if source.startswith("http://") or source.startswith("https://") or source.startswith("file://"):
+            if (
+                source.startswith("http://")
+                or source.startswith("https://")
+                or source.startswith("file://")
+            ):
                 return self.convert_url(source, **kwargs)
             else:
                 return self.convert_local(source, **kwargs)
@@ -959,8 +1041,8 @@ class MarkdownConverter:
         return self.convert_response(response, **kwargs)
 
     def convert_response(
-        self, response: requests.Response, **kwargs: Any
-    ) -> DocumentConverterResult:  # TODO fix kwargs type
+        self, response: requests.Response, **kwargs: Unpack[ConvertOptions]
+    ) -> DocumentConverterResult:
         # Prepare a list of extensions to try (in order of priority)
         ext = kwargs.get("file_extension")
         extensions = [ext] if ext is not None else []
@@ -1005,7 +1087,12 @@ class MarkdownConverter:
 
         return result
 
-    def _convert(self, local_path: str, extensions: List[Union[str, None]], **kwargs) -> DocumentConverterResult:
+    def _convert(
+        self,
+        local_path: str,
+        extensions: List[Union[str, None]],
+        **kwargs: Unpack[ConvertOptions],
+    ) -> DocumentConverterResult:
         error_trace = ""
         for ext in extensions + [None]:  # Try last with no extension
             for converter in self._page_converters:
@@ -1033,7 +1120,9 @@ class MarkdownConverter:
 
                 if res is not None:
                     # Normalize the content
-                    res.text_content = "\n".join([line.rstrip() for line in re.split(r"\r?\n", res.text_content)])
+                    res.text_content = "\n".join(
+                        [line.rstrip() for line in re.split(r"\r?\n", res.text_content)]
+                    )
                     res.text_content = re.sub(r"\n{3,}", "\n\n", res.text_content)
 
                     # Todo
@@ -1051,14 +1140,12 @@ class MarkdownConverter:
         )
 
     def _append_ext(self, extensions, ext):
-        """Append a unique non-None, non-empty extension to a list of extensions."""
         if ext is None:
             return
         ext = ext.strip()
         if ext == "":
             return
-        # if ext not in extensions:
-        if True:
+        if ext not in extensions:
             extensions.append(ext)
 
     def _guess_ext_magic(self, path):
