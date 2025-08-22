@@ -57,13 +57,15 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         Instantiate a new RequestsMarkdownBrowser.
 
         Arguments:
+            local_root: Root directory where browser data is stored locally.
+            workplace_name: Name of the workspace directory within ``local_root``.
             start_page: The page on which the browser starts (default: "about:blank")
             viewport_size: Approximately how many *characters* fit in the viewport. Viewport dimensions are adjusted dynamically to avoid cutting off words (default: 8192).
             downloads_folder: Path to where downloads are saved. If None, downloads are disabled. (default: None)
             search_engine: An instance of MarkdownSearch, which handles web searches performed by this browser (default: a new `BingMarkdownSearch()` with default parameters)
-            markdown_converted: An instance of a MarkdownConverter used to convert HTML pages and downloads to Markdown (default: a new `MarkdownConerter()` with default parameters)
-            request_session: The session from which to issue requests (default: a new `requests.Session()` instance with default parameters)
-            request_get_kwargs: Extra parameters passed to evert `.get()` call made to requests.
+            markdown_converter: An instance of a MarkdownConverter used to convert HTML pages and downloads to Markdown (default: a new `MarkdownConverter()` with default parameters)
+            requests_session: The session from which to issue requests (default: a new `requests.Session()` instance with default parameters)
+            requests_get_kwargs: Extra parameters passed to every `.get()` call made to requests.
         """
         self.local_workplace = os.path.join(local_root, workplace_name)
         self.docker_workplace = f"/{workplace_name}"
@@ -340,7 +342,7 @@ class RequestsMarkdownBrowser(AbstractMarkdownBrowser):
         Arguments:
             url: The fully-qualified URL to fetch.
             session: Used to override the session used for this request. If None, use `self._requests_session` as usual.
-            requests_get_kwargs: Extra arguments passes to `requests.Session.get`.
+            requests_get_kwargs: Extra arguments passed to `requests.Session.get`.
         """
         download_path: str = ""
         response: Union[requests.Response, None] = None
