@@ -15,13 +15,11 @@ from core.security.sandbox import SandboxTimeout, run_in_sandbox as _run_in_sand
 
 def run_in_sandbox(fn):
     """Return a callable that executes ``fn`` within the sandbox."""
-
     def wrapper(args: dict, *, timeout_s: int = 20, allow_unsafe: bool = False):
         unsafe = allow_unsafe or os.getenv("ALLOW_UNSAFE_SANDBOX")
         if unsafe and os.name != "posix":
             print("WARNING: running without sandbox isolation", file=sys.stderr)
         return _run_in_sandbox(fn, args, timeout_s=timeout_s, allow_unsafe=allow_unsafe)
-
     return wrapper
 
 
