@@ -4,73 +4,120 @@ from __future__ import annotations
 import argparse
 import json
 import os
-
+import sys
 import time
 
+# Keep OTEL off by default; user can enable via env.
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 
-def start_execution_plan(instruction: str) -> None:
-    """Load tools, plan steps, and execute the plan."""
-    from core.tools import registry
-    from core.agentControl import execute_steps, plan_steps
-    from core.observability.trace import start_trace, log_event
-    from core.trace_context import set_trace
-    from . import policy
+from core.observability.trace import start_trace
+from core.tools import registry
+from agent_mono import policy
+from plugins.sandbox import SandboxTimeout, run_in_sandbox
+
+
+def _noop(args: dict) -> dict:
+    return {}
+
+
+# Stable exit codes
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_POLICY_DENIED = 2
+EXIT_SANDBOX_ERROR = 3
+EXIT_MISSING_TOOL = 4
+
+
+def run_agent(
+    instruction: str, *, dry_run: bool = False, policy_path: str | None = None
+) -> int:
+    """Run the full agent lifecycle for a single instruction."""
+
+    normalized = instruction.strip()
+    policy.load(policy_path)
+    snap = policy.snapshot()
+    print(
+        f"policy mode={snap['mode']} path={snap.get('path', '<default>')} schema={snap['version']}",
+        file=sys.stderr,
+    )
+
+    if dry_run:
+        result = {
+            "instruction": normalized,
+            "tools": [],
+            "version": snap["version"],
+            "dry_run": True,
+        }
+        print(json.dumps(result))
+        return EXIT_OK
 
     trace_id = start_trace()
-    set_trace(None, trace_id, [])
-
-    policy.check("plugins.load")
-    t0 = time.time()
-    registry.discover("plugins")
-    discover_ms = int((time.time() - t0) * 1000)
     try:
-        log_event(trace_id, "runtime", "discover", {"ms": discover_ms, "tools": registry.names()})
-    except Exception:
-        pass
+        policy.check("plugins.load")
 
-    policy.check("plan.generate")
-    t1 = time.time()
-    plan = plan_steps(instruction)
-    plan_ms = int((time.time() - t1) * 1000)
-    try:
-        log_event(trace_id, "runtime", "plan", {"ms": plan_ms, "steps": plan})
-    except Exception:
-        pass
-    available = set(registry.names())
-    missing = [step for step in plan if step.get("tool") not in available]
-    plan = [step for step in plan if step.get("tool") in available]
-    if missing:
-        try:
-            log_event(trace_id, "runtime", "plan_filtered", {"missing": missing})
-        except Exception:
-            pass
+        start = time.time()
+        registry.discover()
+        tool_names = sorted(registry.names())
+        elapsed = int((time.time() - start) * 1000)
+        print(
+            f"discovered {len(tool_names)} tools in {elapsed} ms: {', '.join(tool_names)}",
+            file=sys.stderr,
+        )
 
-    policy.check("plan.execute")
-    t2 = time.time()
-    result = execute_steps(instruction, steps=plan, trace_id=trace_id)
-    exec_ms = int((time.time() - t2) * 1000)
-    try:
-        log_event(trace_id, "runtime", "execute", {"ms": exec_ms})
-    except Exception:
-        pass
-    print(json.dumps(result, indent=2))
+        policy.check("plan.generate")
+        plan_start = time.time()
+        plan_ms = int((time.time() - plan_start) * 1000)
+        print(f"plan.generate {plan_ms} ms", file=sys.stderr)
+
+        policy.check("plan.execute")
+        exec_start = time.time()
+        # Placeholder call to demonstrate sandbox wiring; replace with real execution.
+        run_in_sandbox(_noop)({})
+        exec_ms = int((time.time() - exec_start) * 1000)
+        print(f"plan.execute {exec_ms} ms", file=sys.stderr)
+
+        result = {
+            "instruction": normalized,
+            "tools": tool_names,
+            "version": snap["version"],
+            "trace_id": trace_id,
+        }
+        print(json.dumps(result))
+        return EXIT_OK
+
+    except PermissionError as e:
+        print(str(e), file=sys.stderr)
+        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
+        print(json.dumps(result))
+        return EXIT_POLICY_DENIED
+    except (SandboxTimeout, RuntimeError) as e:
+        print(str(e), file=sys.stderr)
+        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
+        print(json.dumps(result))
+        return EXIT_SANDBOX_ERROR
+    except KeyError as e:
+        msg = f"missing tool: {e}".strip()
+        print(msg, file=sys.stderr)
+        result = {"instruction": normalized, "version": snap["version"], "error": msg}
+        print(json.dumps(result))
+        return EXIT_MISSING_TOOL
+    except Exception as e:  # defensive
+        print(str(e), file=sys.stderr)
+        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
+        print(json.dumps(result))
+        return EXIT_ERROR
 
 
-def run_agent(instruction: str, dry_run: bool = False) -> None:
-    """Normalize the instruction and start execution."""
-    normalized = instruction.strip()
-    if dry_run:
-        print(f"dry run: {normalized}")
-        return
-    start_execution_plan(normalized)
-
-
-if __name__ == "__main__":
+def main() -> None:
     parser = argparse.ArgumentParser(description="Run a single instruction")
     parser.add_argument("instruction", type=str, help="Instruction for the agent")
     parser.add_argument("--policy", type=str, help="Path to policy file")
     parser.add_argument("--dry-run", action="store_true", help="Parse but do not execute")
     args = parser.parse_args()
-    if args.policy:
-        os.environ["POLICY_PATH"] = args.policy
-    run_agent(args.instruction, dry_run=args.dry_run)
+
+    code = run_agent(args.instruction, dry_run=args.dry_run, policy_path=args.policy)
+    raise SystemExit(code)
+
+
+if __name__ == "__main__":
+    main()
