@@ -25,7 +25,6 @@ _MODE: str = "default-deny"
 
 def load(path: str | None = None) -> None:
     """Load policy data respecting CLI, env, and default paths."""
-
     global _PATH, _POLICY, _MODE
     repo_default = Path(__file__).resolve().parents[1] / "policies.json"
 
@@ -61,13 +60,11 @@ def load(path: str | None = None) -> None:
 
 def allow(capability: str) -> bool:
     """Return True if capability is permitted."""
-
     return _POLICY["capabilities"].get(capability, {}).get("default", "deny") == "allow"
 
 
 def check(capability: str) -> None:
     """Raise if capability is denied."""
-
     rule = _POLICY["capabilities"].get(capability, {})
     default = rule.get("default", "deny")
     if default != "allow":
@@ -77,7 +74,6 @@ def check(capability: str) -> None:
 
 def snapshot() -> Dict[str, Dict[str, Dict[str, str]]]:
     """Return a copy of current policy for debugging."""
-
     snap = {
         "version": _POLICY.get("version", SCHEMA_VERSION),
         "capabilities": dict(_POLICY["capabilities"]),
@@ -86,4 +82,3 @@ def snapshot() -> Dict[str, Dict[str, Dict[str, str]]]:
     if _PATH is not None:
         snap["path"] = str(_PATH)
     return snap
-
