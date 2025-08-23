@@ -65,7 +65,7 @@ The CLI prints diagnostics to stderr and a single JSON object to stdout:
 ```
 policy mode=loaded path=policies.json schema=1
 discovered 7 tools in 3 ms: csv_parse, json_parse, ...
-{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "..."}
+{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "...", "result": {"outputs": [...]}}
 ```
 No additional text appears on stdout.
 

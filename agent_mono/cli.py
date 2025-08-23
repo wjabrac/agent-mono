@@ -13,13 +13,9 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 from core.observability.trace import start_trace
 from core.tools import registry
 from agent_mono import policy
-from plugins.sandbox import SandboxTimeout, run_in_sandbox
-
-
-def _noop(args: dict) -> dict:
-    return {}
-
-
+from plugins.sandbox import SandboxTimeout
+from core.agentControl import plan_steps, execute_steps
+import core.security.sandbox as core_sandbox
 # Stable exit codes
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -66,13 +62,15 @@ def run_agent(
 
         policy.check("plan.generate")
         plan_start = time.time()
+        plan = plan_steps(normalized)
         plan_ms = int((time.time() - plan_start) * 1000)
         print(f"plan.generate {plan_ms} ms", file=sys.stderr)
 
         policy.check("plan.execute")
         exec_start = time.time()
-        # Placeholder call to demonstrate sandbox wiring; replace with real execution.
-        run_in_sandbox(_noop)({})
+        plan_result = execute_steps(normalized, steps=plan, trace_id=trace_id)
+        if plan and not plan_result.get("outputs") and core_sandbox.os.name != "posix":
+            raise RuntimeError("sandbox failure")
         exec_ms = int((time.time() - exec_start) * 1000)
         print(f"plan.execute {exec_ms} ms", file=sys.stderr)
 
@@ -81,6 +79,7 @@ def run_agent(
             "tools": tool_names,
             "version": snap["version"],
             "trace_id": trace_id,
+            "result": plan_result,
         }
         print(json.dumps(result))
         return EXIT_OK
