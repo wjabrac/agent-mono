@@ -14,11 +14,11 @@ export class Agent {
 
   async executeTask(userInput: string): Promise<string> {
     try {
-      Security.validateInput(userInput);
+      const safeInput = Security.validateInput(userInput);
 
-      const context = await this.memory.retrieveRelevant(userInput);
+      const context = await this.memory.retrieveRelevant(safeInput);
 
-      const plan = await this.planner.generatePlan(userInput, context);
+      const plan = await this.planner.generatePlan(safeInput, context);
 
       const results: string[] = [];
       for (const step of plan.steps) {
@@ -36,12 +36,12 @@ export class Agent {
       }
 
       const response = await this.generator.generateResponse(
-        userInput,
+        safeInput,
         results.join("\n"),
         context
       );
 
-      await this.memory.store(`User: ${userInput}\nAgent: ${response}`);
+      await this.memory.store(`User: ${safeInput}\nAgent: ${response}`);
 
       return response;
     } catch (error) {

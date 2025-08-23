@@ -11,9 +11,9 @@ export class CalculatorTool extends BaseTool {
   });
 
   protected async _execute(args: { expression: string }): Promise<string> {
-    Security.validateInput(args.expression);
+    const expression = Security.validateInput(args.expression);
     try {
-      const result = evaluate(args.expression);
+      const result = evaluate(expression);
       return String(result);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

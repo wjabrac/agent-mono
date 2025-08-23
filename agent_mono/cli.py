@@ -3,19 +3,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 
 import time
-
-from core.tools import registry
-from core.agentControl import execute_steps, plan_steps
-from core.observability.trace import start_trace, log_event
-from core.trace_context import set_trace
-
-from . import policy
 
 
 def start_execution_plan(instruction: str) -> None:
     """Load tools, plan steps, and execute the plan."""
+    from core.tools import registry
+    from core.agentControl import execute_steps, plan_steps
+    from core.observability.trace import start_trace, log_event
+    from core.trace_context import set_trace
+    from . import policy
+
     trace_id = start_trace()
     set_trace(None, trace_id, [])
 
@@ -56,14 +56,21 @@ def start_execution_plan(instruction: str) -> None:
     print(json.dumps(result, indent=2))
 
 
-def run_agent(instruction: str) -> None:
+def run_agent(instruction: str, dry_run: bool = False) -> None:
     """Normalize the instruction and start execution."""
     normalized = instruction.strip()
+    if dry_run:
+        print(f"dry run: {normalized}")
+        return
     start_execution_plan(normalized)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a single instruction")
     parser.add_argument("instruction", type=str, help="Instruction for the agent")
+    parser.add_argument("--policy", type=str, help="Path to policy file")
+    parser.add_argument("--dry-run", action="store_true", help="Parse but do not execute")
     args = parser.parse_args()
-    run_agent(args.instruction)
+    if args.policy:
+        os.environ["POLICY_PATH"] = args.policy
+    run_agent(args.instruction, dry_run=args.dry_run)
