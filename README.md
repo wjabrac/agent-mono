@@ -58,11 +58,29 @@ pip install opentelemetry-api opentelemetry-sdk
 ```
 ### Run an instruction
 ```bash
-python -m agent_mono.cli "list files in /tmp"
+agent "list files in /tmp"
 ```
-The CLI now discovers plugins, generates a plan, and executes it with policy
-checks before each phase. Metrics for discovery, planning, and execution are
-recorded to the local trace store for diagnostics.
+The CLI prints diagnostics to stderr and a single JSON object to stdout:
+
+```
+policy mode=loaded path=policies.json schema=1
+discovered 7 tools in 3 ms: csv_parse, json_parse, ...
+{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "..."}
+```
+No additional text appears on stdout.
+
+### Flags and environment variables
+
+| Option | Description | Precedence |
+|--------|-------------|------------|
+| `--policy` | Path to policy file | highest |
+| `POLICY_PATH` | Environment override for policy path | middle |
+| `policies.json` | Repository default | lowest |
+| `--dry-run` | Print the normalized instruction without discovery or execution | n/a |
+
+Traces for each run are recorded in `data/agent_memory.sqlite`. If OpenTelemetry
+is enabled by setting `OTEL_SDK_DISABLED=false`, spans are exported using a
+stable service name.
 
 ### Create a plugin
 
@@ -77,9 +95,9 @@ export ADVANCED_PLANNING=true
 export POLICY_ENGINE_ENABLED=true
 ```
 
-Risky tools run in a sandboxed subprocess on POSIX systems.
-Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation and execute them directly.
-On non-POSIX platforms the sandbox is otherwise unavailable.
+Risky tools run in a sandboxed subprocess on POSIX systems. On non-POSIX
+platforms tools are denied unless `ALLOW_UNSAFE_SANDBOX=1` is set, in which case
+a warning is printed and the tool executes without isolation.
 
 See [docs/quickstart.md](docs/quickstart.md) for more examples.
 

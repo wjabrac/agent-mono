@@ -23,17 +23,24 @@ Install OpenTelemetry libraries to capture metrics and traces:
 ```bash
 pip install opentelemetry-api opentelemetry-sdk
 ```
+Set `OTEL_SDK_DISABLED=false` to enable exporting spans; otherwise only the
+local trace store is used.
 
 Any Python package manager can be used. The project targets Python 3.10+.
 
 ## Running an instruction
 
 ```bash
-python -m agent_mono.cli "list files in /tmp"
+agent "list files in /tmp"
 ```
-The command discovers available plugins, plans the steps, and executes the plan
-with policy checks between discovery, planning, and execution. Metrics for each
-phase are written to the local trace database for troubleshooting.
+Running the command prints diagnostics to stderr and one JSON object to stdout:
+
+```
+policy mode=loaded path=policies.json schema=1
+discovered 7 tools in 3 ms: csv_parse, json_parse, ...
+{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "..."}
+```
+There is no other stdout text.
 
 ## Creating a plugin
 
@@ -75,9 +82,9 @@ export FS_SAFE_ROOTS=$PWD
 These variables activate the planning, security, and observability capabilities.
 For design details see [`docs/architecture/tool-runtime-and-planning.md`](architecture/tool-runtime-and-planning.md) and the [README](../README.md).
 
-Risky tools run in a sandboxed subprocess on POSIX systems.
-Set `ALLOW_UNSAFE_SANDBOX=1` to bypass isolation on any platform; on non-POSIX
-systems this variable is required because sandboxing is otherwise unavailable.
+Risky tools run in a sandboxed subprocess on POSIX systems. On non-POSIX
+platforms tools are denied unless `ALLOW_UNSAFE_SANDBOX=1` is set, which prints
+a warning and executes the tool without isolation.
 
 ## TypeScript agent
 
