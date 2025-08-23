@@ -304,14 +304,15 @@ def execute_steps(
     steps: List[Dict[str, Any]] | None = None,
     thread_id=None,
     tags=None,
+    trace_id: str | None = None,
 ) -> Dict[str, Any]:
     """Plan, schedule, and execute tool steps for a prompt."""
-    trace_id = start_trace(thread_id)
+    trace_id = trace_id or start_trace(thread_id)
     _thread_local.trace_id = trace_id
     set_trace(thread_id, trace_id, tags or [])
     out = []
     # Plan if not provided
-    if not steps:
+    if steps is None:
         planned = plan_steps(prompt)
         planned = expand_plan(planned)
         log_event(trace_id, "decision", "planner:proposed", {"steps": planned})
