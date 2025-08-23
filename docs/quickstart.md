@@ -38,7 +38,7 @@ Running the command prints diagnostics to stderr and one JSON object to stdout:
 ```
 policy mode=loaded path=policies.json schema=1
 discovered 7 tools in 3 ms: csv_parse, json_parse, ...
-{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "..."}
+{"instruction": "list files in /tmp", "tools": ["csv_parse"], "version": 1, "trace_id": "...", "result": {"outputs": [...]}}
 ```
 There is no other stdout text.
 
