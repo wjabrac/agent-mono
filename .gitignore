@@ -6,3 +6,4 @@ dist/
 hitl.ok
 __pycache__/
 *.pyc
+*.orig
