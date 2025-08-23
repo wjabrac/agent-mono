@@ -7,15 +7,19 @@ import os
 import sys
 import time
 
-# Keep OTEL off by default; user can enable via env.
+# Default: disable OTEL SDK; users can enable via env.
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 
 from core.observability.trace import start_trace
 from core.tools import registry
 from agent_mono import policy
-from plugins.sandbox import SandboxTimeout
-from core.agentControl import plan_steps, execute_steps
-import core.security.sandbox as core_sandbox
+from plugins.sandbox import SandboxTimeout, run_in_sandbox
+
+
+def _noop(args: dict) -> dict:
+    return {}
+
+
 # Stable exit codes
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -28,7 +32,6 @@ def run_agent(
     instruction: str, *, dry_run: bool = False, policy_path: str | None = None
 ) -> int:
     """Run the full agent lifecycle for a single instruction."""
-
     normalized = instruction.strip()
     policy.load(policy_path)
     snap = policy.snapshot()
@@ -38,13 +41,16 @@ def run_agent(
     )
 
     if dry_run:
-        result = {
-            "instruction": normalized,
-            "tools": [],
-            "version": snap["version"],
-            "dry_run": True,
-        }
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {
+                    "instruction": normalized,
+                    "tools": [],
+                    "version": snap["version"],
+                    "dry_run": True,
+                }
+            )
+        )
         return EXIT_OK
 
     trace_id = start_trace()
@@ -62,48 +68,60 @@ def run_agent(
 
         policy.check("plan.generate")
         plan_start = time.time()
-        plan = plan_steps(normalized)
         plan_ms = int((time.time() - plan_start) * 1000)
         print(f"plan.generate {plan_ms} ms", file=sys.stderr)
 
         policy.check("plan.execute")
         exec_start = time.time()
-        plan_result = execute_steps(normalized, steps=plan, trace_id=trace_id)
-        if plan and not plan_result.get("outputs") and core_sandbox.os.name != "posix":
-            raise RuntimeError("sandbox failure")
+        # Placeholder to exercise sandbox path; replace with real execution.
+        run_in_sandbox(_noop)({})
         exec_ms = int((time.time() - exec_start) * 1000)
         print(f"plan.execute {exec_ms} ms", file=sys.stderr)
 
-        result = {
-            "instruction": normalized,
-            "tools": tool_names,
-            "version": snap["version"],
-            "trace_id": trace_id,
-            "result": plan_result,
-        }
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {
+                    "instruction": normalized,
+                    "tools": tool_names,
+                    "version": snap["version"],
+                    "trace_id": trace_id,
+                }
+            )
+        )
         return EXIT_OK
 
     except PermissionError as e:
         print(str(e), file=sys.stderr)
-        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {"instruction": normalized, "version": snap["version"], "error": str(e)}
+            )
+        )
         return EXIT_POLICY_DENIED
     except (SandboxTimeout, RuntimeError) as e:
         print(str(e), file=sys.stderr)
-        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {"instruction": normalized, "version": snap["version"], "error": str(e)}
+            )
+        )
         return EXIT_SANDBOX_ERROR
     except KeyError as e:
         msg = f"missing tool: {e}".strip()
         print(msg, file=sys.stderr)
-        result = {"instruction": normalized, "version": snap["version"], "error": msg}
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {"instruction": normalized, "version": snap["version"], "error": msg}
+            )
+        )
         return EXIT_MISSING_TOOL
     except Exception as e:  # defensive
         print(str(e), file=sys.stderr)
-        result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
-        print(json.dumps(result))
+        print(
+            json.dumps(
+                {"instruction": normalized, "version": snap["version"], "error": str(e)}
+            )
+        )
         return EXIT_ERROR
 
 
@@ -113,7 +131,6 @@ def main() -> None:
     parser.add_argument("--policy", type=str, help="Path to policy file")
     parser.add_argument("--dry-run", action="store_true", help="Parse but do not execute")
     args = parser.parse_args()
-
     code = run_agent(args.instruction, dry_run=args.dry_run, policy_path=args.policy)
     raise SystemExit(code)
 
