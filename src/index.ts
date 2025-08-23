@@ -3,7 +3,7 @@ import { ToolRegistry } from "./Tools/ToolRegistry";
 import { WebSearchTool } from "./Tools/WebSearchTool";
 import { FileAnalysisTool } from "./Tools/FileAnalysisTool";
 import { CalculatorTool } from "./Tools/CalculatorTool";
-import { VectorMemory } from "./Memory/VectorMemory";
+import { PersistentVectorMemory } from "./Memory/PersistentVectorMemory";
 import { Planner } from "./Planner";
 import { ResponseGenerator } from "./ResponseGenerator";
 import { DirectResponseTool } from "./Tools/DirectResponseTool";
@@ -15,7 +15,7 @@ toolRegistry.registerTool(new FileAnalysisTool());
 toolRegistry.registerTool(new CalculatorTool());
 toolRegistry.registerTool(new DirectResponseTool());
 
-const memory = new VectorMemory();
+const memory = new PersistentVectorMemory();
 const planner = new Planner();
 const generator = new ResponseGenerator();
 
