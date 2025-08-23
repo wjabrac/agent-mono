@@ -48,16 +48,15 @@ Plan ONLY for the current request. Use minimal steps.
     input: string,
     context: string[]
   ): Promise<{ steps: any[] }> {
+    const safeInput = Security.validateInput(input);
     try {
-      Security.validateInput(input);
-
       const tools = this.toolDescriptions();
       const contextStr = context.join("\n").slice(0, 2000);
 
       const prompt = await this.template.format({
         tools,
         context: contextStr || "No relevant context",
-        input,
+        input: safeInput,
       });
 
       const response = await this.model.invoke(prompt);
@@ -70,7 +69,7 @@ Plan ONLY for the current request. Use minimal steps.
     } catch (error) {
       console.error("Planning failed, using fallback");
       return {
-        steps: [{ tool: "DirectResponse", arguments: { input } }],
+        steps: [{ tool: "DirectResponse", arguments: { input: safeInput } }],
       };
     }
   }

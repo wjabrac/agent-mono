@@ -7,6 +7,7 @@ import os
 import sys
 import time
 
+# Keep OTEL off by default; user can enable via env.
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 
 from core.observability.trace import start_trace
@@ -18,11 +19,14 @@ from plugins.sandbox import SandboxTimeout, run_in_sandbox
 def _noop(args: dict) -> dict:
     return {}
 
+
+# Stable exit codes
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_POLICY_DENIED = 2
 EXIT_SANDBOX_ERROR = 3
 EXIT_MISSING_TOOL = 4
+
 
 def run_agent(
     instruction: str, *, dry_run: bool = False, policy_path: str | None = None
@@ -36,6 +40,7 @@ def run_agent(
         f"policy mode={snap['mode']} path={snap.get('path', '<default>')} schema={snap['version']}",
         file=sys.stderr,
     )
+
     if dry_run:
         result = {
             "instruction": normalized,
@@ -49,6 +54,7 @@ def run_agent(
     trace_id = start_trace()
     try:
         policy.check("plugins.load")
+
         start = time.time()
         registry.discover()
         tool_names = sorted(registry.names())
@@ -57,15 +63,19 @@ def run_agent(
             f"discovered {len(tool_names)} tools in {elapsed} ms: {', '.join(tool_names)}",
             file=sys.stderr,
         )
+
         policy.check("plan.generate")
         plan_start = time.time()
         plan_ms = int((time.time() - plan_start) * 1000)
         print(f"plan.generate {plan_ms} ms", file=sys.stderr)
+
         policy.check("plan.execute")
         exec_start = time.time()
+        # Placeholder call to demonstrate sandbox wiring; replace with real execution.
         run_in_sandbox(_noop)({})
         exec_ms = int((time.time() - exec_start) * 1000)
         print(f"plan.execute {exec_ms} ms", file=sys.stderr)
+
         result = {
             "instruction": normalized,
             "tools": tool_names,
@@ -74,6 +84,7 @@ def run_agent(
         }
         print(json.dumps(result))
         return EXIT_OK
+
     except PermissionError as e:
         print(str(e), file=sys.stderr)
         result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
@@ -90,11 +101,12 @@ def run_agent(
         result = {"instruction": normalized, "version": snap["version"], "error": msg}
         print(json.dumps(result))
         return EXIT_MISSING_TOOL
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:  # defensive
         print(str(e), file=sys.stderr)
         result = {"instruction": normalized, "version": snap["version"], "error": str(e)}
         print(json.dumps(result))
         return EXIT_ERROR
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run a single instruction")
@@ -102,10 +114,10 @@ def main() -> None:
     parser.add_argument("--policy", type=str, help="Path to policy file")
     parser.add_argument("--dry-run", action="store_true", help="Parse but do not execute")
     args = parser.parse_args()
-    code = run_agent(
-        args.instruction, dry_run=args.dry_run, policy_path=args.policy
-    )
+
+    code = run_agent(args.instruction, dry_run=args.dry_run, policy_path=args.policy)
     raise SystemExit(code)
+
 
 if __name__ == "__main__":
     main()

@@ -1,26 +1,12 @@
 {
   "version": 1,
   "capabilities": {
-    "fs.read": {
-      "default": "deny"
-    },
-    "fs.write": {
-      "default": "deny"
-    },
-    "network": {
-      "default": "deny"
-    },
-    "subprocess": {
-      "default": "deny"
-    },
-    "plugins.load": {
-      "default": "allow"
-    },
-    "plan.generate": {
-      "default": "allow"
-    },
-    "plan.execute": {
-      "default": "allow"
-    }
+    "fs.read":      { "default": "deny" },
+    "fs.write":     { "default": "deny" },
+    "network":      { "default": "deny" },
+    "subprocess":   { "default": "deny" },
+    "plugins.load": { "default": "allow" },
+    "plan.generate":{ "default": "allow" },
+    "plan.execute": { "default": "allow" }
   }
 }
