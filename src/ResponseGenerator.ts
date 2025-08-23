@@ -35,11 +35,11 @@ Response:
     results: string,
     context: string[]
   ): Promise<string> {
-    Security.validateInput(input);
+    const safeInput = Security.validateInput(input);
 
     const contextStr = context.join("\n").slice(0, 1500);
     const prompt = await this.template.format({
-      input,
+      input: safeInput,
       context: contextStr || "No relevant context",
       results: results || "No tool results",
     });
