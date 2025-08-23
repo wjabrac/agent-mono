@@ -19,6 +19,7 @@ graph TD
 - Policy engine for security controls.
 - Advanced planning with loops and conditionals.
 - Human-in-the-loop approvals.
+- Persistent vector memory across sessions using ChromaDB.
 - Metrics, tracing, and alerting via Prometheus, Grafana, Jaeger, and Alertmanager.
 
 ## Security

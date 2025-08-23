@@ -2,6 +2,8 @@
 
 This guide shows how to try the experimental agent runtime. For an overview of the architecture and features, see the [README](../README.md).
 
+The agent now maintains a persistent vector memory backed by ChromaDB so context is reused across sessions.
+
 ## Installation
 
 ```bash
