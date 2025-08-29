@@ -1,6 +1,6 @@
 """Code splitter."""
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from llama_index.core.bridge.pydantic import Field, PrivateAttr
 from llama_index.core.callbacks.base import CallbackManager
@@ -22,8 +22,12 @@ class CodeSplitter(TextSplitter):
     https://docs.sweep.dev/blogs/chunking-2m-files
     """
 
-    language: str = Field(
-        description="The programming language of the code being split."
+    language: Optional[str] = Field(
+        default=None,
+        description=(
+            "The programming language of the code being split. "
+            "If not provided, it will be detected automatically."
+        ),
     )
     chunk_lines: int = Field(
         default=DEFAULT_CHUNK_LINES,
@@ -44,7 +48,7 @@ class CodeSplitter(TextSplitter):
 
     def __init__(
         self,
-        language: str,
+        language: Optional[str] = None,
         chunk_lines: int = DEFAULT_CHUNK_LINES,
         chunk_lines_overlap: int = DEFAULT_LINES_OVERLAP,
         max_chars: int = DEFAULT_MAX_CHARS,
@@ -60,8 +64,11 @@ class CodeSplitter(TextSplitter):
         callback_manager = callback_manager or CallbackManager([])
         id_func = id_func or default_id_func
 
+        normalized_language = (
+            self._normalize_language_name(language) if language is not None else None
+        )
         super().__init__(
-            language=language,
+            language=normalized_language,
             chunk_lines=chunk_lines,
             chunk_lines_overlap=chunk_lines_overlap,
             max_chars=max_chars,
@@ -71,11 +78,12 @@ class CodeSplitter(TextSplitter):
             id_func=id_func,
         )
 
-        if parser is None:
+        self._parser = parser
+        if normalized_language is not None and parser is None:
             try:
                 import tree_sitter_language_pack  # pants: no-infer-dep
 
-                parser = tree_sitter_language_pack.get_parser(language)  # type: ignore
+                self._parser = tree_sitter_language_pack.get_parser(normalized_language)
             except ImportError:
                 raise ImportError(
                     "Please install tree_sitter_language_pack to use CodeSplitter."
@@ -88,15 +96,13 @@ class CodeSplitter(TextSplitter):
                     "for a list of valid languages."
                 )
                 raise
-        if not isinstance(parser, Parser):
+        if self._parser is not None and not isinstance(self._parser, Parser):
             raise ValueError("Parser must be a tree-sitter Parser object.")
-
-        self._parser = parser
 
     @classmethod
     def from_defaults(
         cls,
-        language: str,
+        language: Optional[str] = None,
         chunk_lines: int = DEFAULT_CHUNK_LINES,
         chunk_lines_overlap: int = DEFAULT_LINES_OVERLAP,
         max_chars: int = DEFAULT_MAX_CHARS,
@@ -169,11 +175,35 @@ class CodeSplitter(TextSplitter):
             ValueError: If the code cannot be parsed for the specified language.
 
         """
-        """Split incoming code and return chunks using the AST."""
         with self.callback_manager.event(
             CBEventType.CHUNKING, payload={EventPayload.CHUNKS: [text]}
         ) as event:
             text_bytes = bytes(text, "utf-8")
+            if self._parser is None:
+                detected_lang = self.language
+                if detected_lang is None:
+                    try:
+                        from guesslang import Guess  # pants: no-infer-dep
+                    except ImportError as e:
+                        raise ImportError(
+                            "guesslang is required for automatic language detection. "
+                            "Please install guesslang or specify the language explicitly."
+                        ) from e
+
+                    guess = Guess()
+                    detected_lang = guess.language_name(text)
+
+                norm_lang = self._normalize_language_name(detected_lang)
+                try:
+                    import tree_sitter_language_pack  # pants: no-infer-dep
+
+                    self._parser = tree_sitter_language_pack.get_parser(norm_lang)
+                    self.language = norm_lang
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not get parser for detected language {detected_lang}."
+                    ) from e
+
             tree = self._parser.parse(text_bytes)
 
             if (
@@ -192,4 +222,19 @@ class CodeSplitter(TextSplitter):
             else:
                 raise ValueError(f"Could not parse code with language {self.language}.")
 
-        # TODO: set up auto-language detection using something like https://github.com/yoeo/guesslang.
+    @staticmethod
+    def _normalize_language_name(language: str) -> str:
+        """Normalize language names to match tree-sitter naming."""
+
+        mapping: Dict[str, str] = {
+            "cpp": "cpp",
+            "csharp": "csharp",
+            "objectivec": "objc",
+            "objc": "objc",
+            "shell": "bash",
+            "bash": "bash",
+        }
+        lang = language.lower().strip()
+        lang = lang.replace("++", "pp").replace("#", "sharp")
+        lang = lang.replace(" ", "").replace("-", "")
+        return mapping.get(lang, lang)
