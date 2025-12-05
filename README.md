@@ -101,6 +101,36 @@ a warning is printed and the tool executes without isolation.
 
 See [docs/quickstart.md](docs/quickstart.md) for more examples.
 
+### Natural language decomposition and voice chat
+
+Enable `ADVANCED_PLANNING` (and optionally `ENABLE_REFLECTION`) to let the
+runtime break a free-form instruction into a multi-step plan and checkpoints.
+For hands-free usage, the repo now includes a voice loop:
+
+```bash
+VOICE_STT_COMMAND="whisper.cpp -f {file} -otxt --print-colors false" \
+VOICE_TTS_COMMAND="espeak -w /tmp/agent_reply.wav '{text}' && play /tmp/agent_reply.wav" \
+VOICE_RECORD_COMMAND="ffmpeg -hide_banner -loglevel error -f alsa -i default -t 6 -ac 1 -ar 16000 {file}" \
+npm run voice
+```
+
+- `VOICE_STT_COMMAND` (required) should output the transcription to stdout and
+  must include the `{file}` placeholder for the recorded WAV file path.
+- `VOICE_TTS_COMMAND` (optional) should speak the `{text}` placeholder for the
+  agent reply; if unset the response is printed only.
+- `VOICE_RECORD_COMMAND` controls how audio is captured; the default expects
+  `ffmpeg` with an ALSA device. Override it for macOS (e.g.,
+  `ffmpeg -f avfoundation -i ":0" ...`) or other inputs. Adjust the duration
+  with `VOICE_RECORD_SECONDS`. Set `VOICE_COMMAND_TIMEOUT_MS` to avoid hanging
+  capture or playback commands.
+- `AGENT_PERSONA` and `AGENT_RESPONSE_TEMPERATURE` tune the reply style; the
+  default persona is "resilient, creative, and highly effective" while keeping
+  responses factual.
+
+Press Enter to capture an utterance, or type text directly. See the
+[quickstart](docs/quickstart.md#natural-language-decomposition-and-reflection)
+for more examples.
+
 ## Metrics stack
 
 Prometheus, Alertmanager, Grafana, and Jaeger services are included in

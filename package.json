@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/index.ts"
+    "start": "ts-node src/index.ts",
+    "voice": "ts-node src/voice.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.2.4",
