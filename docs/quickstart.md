@@ -86,6 +86,57 @@ Risky tools run in a sandboxed subprocess on POSIX systems. On non-POSIX
 platforms tools are denied unless `ALLOW_UNSAFE_SANDBOX=1` is set, which prints
 a warning and executes the tool without isolation.
 
+## Natural language decomposition and reflection
+
+Turn on planning flags to let the runtime break down natural-language goals into
+multiple steps and optional checkpoints:
+
+```bash
+export ADVANCED_PLANNING=true         # expand loops/conditionals in plans
+export ENABLE_REFLECTION=true         # add self-reflection checkpoints
+export HITL_DEFAULT=false             # skip human approvals for unattended runs
+```
+
+Then run free-form tasks similar to Open Interpreter:
+
+```bash
+ADVANCED_PLANNING=true agent "Draft a 3-step plan to summarize ./docs and execute it"
+```
+
+The agent will emit a JSON trace containing the decomposed plan steps and
+results. Keep policy flags (`POLICY_ENGINE_ENABLED`, `ALLOWED_TOOLS`,
+`FS_SAFE_ROOTS`) tuned to the resources you intend to allow during execution.
+
+## Using voice as the front-end
+
+There is a built-in voice loop if you prefer a hands-free workflow. It records
+audio, sends it through a configurable STT command, runs the agent, and
+optionally speaks the reply:
+
+```bash
+VOICE_STT_COMMAND="whisper.cpp -f {file} -otxt --print-colors false" \
+VOICE_TTS_COMMAND="espeak -w /tmp/agent_reply.wav '{text}' && play /tmp/agent_reply.wav" \
+VOICE_RECORD_COMMAND="ffmpeg -hide_banner -loglevel error -f alsa -i default -t 6 -ac 1 -ar 16000 {file}" \
+npm run voice
+```
+
+- `VOICE_STT_COMMAND` is required and must print the transcription to stdout.
+  Use `{file}` to reference the recorded WAV file.
+- `VOICE_TTS_COMMAND` is optional and should speak the `{text}` placeholder for
+  the agent response.
+- `VOICE_RECORD_COMMAND` controls microphone capture; override it if your
+  environment needs a different `ffmpeg` input target. Set
+  `VOICE_RECORD_SECONDS` to adjust duration. Set `VOICE_COMMAND_TIMEOUT_MS` to
+  cap how long capture or playback commands can run.
+- Tune personality and creativity with `AGENT_PERSONA` and
+  `AGENT_RESPONSE_TEMPERATURE`; the default persona is "resilient, creative, and
+  highly effective" while staying grounded in facts.
+
+Press Enter to trigger recording or type directly into the prompt. The loop uses
+the same planning flags as the CLI, so you can combine `ADVANCED_PLANNING` and
+`ENABLE_REFLECTION` with the environment variables above to make it act more
+like an assistant.
+
 ## TypeScript agent
 
 Install dependencies and start the Node-based agent:

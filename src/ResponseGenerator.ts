@@ -7,14 +7,21 @@ export class ResponseGenerator {
   private template: PromptTemplate;
 
   constructor() {
+    const persona =
+      process.env.AGENT_PERSONA ??
+      "You are a resilient, creative, and highly effective AI assistant who balances imagination with factual grounding.";
+    const temperature = Number(process.env.AGENT_RESPONSE_TEMPERATURE ?? "0.7");
+
     this.model = new Ollama({
       baseUrl: "http://localhost:11434",
       model: "llama2",
-      temperature: 0.7,
+      temperature,
     });
 
     this.template = PromptTemplate.fromTemplate(`
-You are an AI assistant. Generate a helpful response based on:
+${persona}
+
+Generate a helpful response based on:
 - User request: {input}
 - Context: {context}
 - Tool results: {results}
