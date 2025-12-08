@@ -116,11 +116,12 @@ npm run voice
 
 - `VOICE_STT_COMMAND` (required) should output the transcription to stdout and
   must include the `{file}` placeholder for the recorded WAV file path.
-- `VOICE_TTS_COMMAND` (optional) should speak the `{text}` placeholder for the
-  agent reply; the `{text}` substitution is shell-escaped for safety. If unset,
-  the response is printed only.
-- `VOICE_RECORD_COMMAND` controls how audio is captured; the default expects
-  `ffmpeg` with an ALSA device. Override it for macOS (e.g.,
+- `VOICE_TTS_COMMAND` (optional) must include the `{text}` placeholder for the
+  agent reply; the `{text}` substitution is shell-escaped before execution. If
+  unset, the response is printed only.
+- `VOICE_RECORD_COMMAND` controls how audio is captured and must include the
+  `{file}` placeholder; the default expects `ffmpeg` with an ALSA device.
+  Override it for macOS (e.g.,
   `ffmpeg -f avfoundation -i ":0" ...`) or other inputs. Adjust the duration
   with `VOICE_RECORD_SECONDS`. Set `VOICE_COMMAND_TIMEOUT_MS` to avoid hanging
   capture or playback commands.

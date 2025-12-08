@@ -122,12 +122,13 @@ npm run voice
 
 - `VOICE_STT_COMMAND` is required and must print the transcription to stdout.
   Use `{file}` to reference the recorded WAV file.
-- `VOICE_TTS_COMMAND` is optional and should speak the `{text}` placeholder for
+- `VOICE_TTS_COMMAND` is optional but must include the `{text}` placeholder for
   the agent response; the `{text}` substitution is shell-escaped for safety.
-- `VOICE_RECORD_COMMAND` controls microphone capture; override it if your
-  environment needs a different `ffmpeg` input target. Set
-  `VOICE_RECORD_SECONDS` to adjust duration. Set `VOICE_COMMAND_TIMEOUT_MS` to
-  cap how long capture or playback commands can run.
+- `VOICE_RECORD_COMMAND` controls microphone capture and must include the
+  `{file}` placeholder; override it if your environment needs a different
+  `ffmpeg` input target. Set `VOICE_RECORD_SECONDS` to adjust duration. Set
+  `VOICE_COMMAND_TIMEOUT_MS` to cap how long capture or playback commands can
+  run.
 - Tune personality and creativity with `AGENT_PERSONA` and
   `AGENT_RESPONSE_TEMPERATURE`; the default persona is "resilient, creative, and
   highly effective" while staying grounded in facts.

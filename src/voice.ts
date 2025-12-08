@@ -34,6 +34,13 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
+function assertPlaceholder(template: string | undefined, placeholder: string, description: string) {
+  if (!template) return;
+  if (!template.includes(placeholder)) {
+    throw new Error(`${description} must include ${placeholder}`);
+  }
+}
+
 async function runCommand(command: string, description: string) {
   try {
     return await exec(command, { timeout: commandTimeoutMs });
@@ -48,6 +55,7 @@ async function runCommand(command: string, description: string) {
 async function recordAudio(): Promise<string> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-voice-"));
   const filePath = path.join(tmpDir, "input.wav");
+  assertPlaceholder(recordCommandTemplate, "{file}", "VOICE_RECORD_COMMAND");
   const command = applyTemplate(recordCommandTemplate, { file: filePath });
 
   await runCommand(command, "Recording failed");
@@ -73,6 +81,7 @@ async function transcribeAudio(filePath: string): Promise<string> {
 async function speak(text: string): Promise<void> {
   if (!ttsCommandTemplate) return;
 
+  assertPlaceholder(ttsCommandTemplate, "{text}", "VOICE_TTS_COMMAND");
   const command = applyTemplate(ttsCommandTemplate, { text: escapeShellArg(text) });
   try {
     await runCommand(command, "Speech playback failed");
