@@ -45,13 +45,14 @@ function detectRiskySignals(content: string): string[] {
   const normalized = content.toLowerCase();
   const risks = new Set<string>();
 
-  for (const keyword of defaultRiskyKeywords) {
-    if (normalized.includes(keyword)) risks.add(keyword);
-  }
+  const addIfPresent = (keyword: string) => {
+    if (normalized.includes(keyword)) {
+      risks.add(keyword);
+    }
+  };
 
-  for (const keyword of approvalKeywords) {
-    if (normalized.includes(keyword)) risks.add(keyword);
-  }
+  defaultRiskyKeywords.forEach(addIfPresent);
+  approvalKeywords.forEach(addIfPresent);
 
   return Array.from(risks);
 }

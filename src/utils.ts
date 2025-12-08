@@ -10,3 +10,8 @@ export function applyTemplate(template: string, values: Record<string, string>):
     Object.prototype.hasOwnProperty.call(values, key) ? values[key] : ""
   );
 }
+
+export function escapeShellArg(value: string): string {
+  const safe = value.replace(/'/g, "'\\''");
+  return `'${safe}'`;
+}

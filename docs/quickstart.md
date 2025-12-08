@@ -115,7 +115,7 @@ optionally speaks the reply:
 
 ```bash
 VOICE_STT_COMMAND="whisper.cpp -f {file} -otxt --print-colors false" \
-VOICE_TTS_COMMAND="espeak -w /tmp/agent_reply.wav '{text}' && play /tmp/agent_reply.wav" \
+VOICE_TTS_COMMAND='tmpfile=$(mktemp /tmp/agent_reply_XXXX.wav); espeak -w "$tmpfile" {text}; play "$tmpfile"; rm -f "$tmpfile"' \
 VOICE_RECORD_COMMAND="ffmpeg -hide_banner -loglevel error -f alsa -i default -t 6 -ac 1 -ar 16000 {file}" \
 npm run voice
 ```
@@ -123,7 +123,7 @@ npm run voice
 - `VOICE_STT_COMMAND` is required and must print the transcription to stdout.
   Use `{file}` to reference the recorded WAV file.
 - `VOICE_TTS_COMMAND` is optional and should speak the `{text}` placeholder for
-  the agent response.
+  the agent response; the `{text}` substitution is shell-escaped for safety.
 - `VOICE_RECORD_COMMAND` controls microphone capture; override it if your
   environment needs a different `ffmpeg` input target. Set
   `VOICE_RECORD_SECONDS` to adjust duration. Set `VOICE_COMMAND_TIMEOUT_MS` to

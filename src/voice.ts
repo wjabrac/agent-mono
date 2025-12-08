@@ -6,7 +6,7 @@ import { exec as execCallback } from "child_process";
 import { promisify } from "util";
 import { PlanAssessment } from "./OperationMode";
 import { createDefaultAgent } from "./setupAgent";
-import { applyTemplate, parseNumberEnv } from "./utils";
+import { applyTemplate, escapeShellArg, parseNumberEnv } from "./utils";
 
 const exec = promisify(execCallback);
 
@@ -38,11 +38,9 @@ async function runCommand(command: string, description: string) {
   try {
     return await exec(command, { timeout: commandTimeoutMs });
   } catch (error) {
-    const stderr = (error as { stderr?: string }).stderr ?? "";
-    const stdout = (error as { stdout?: string }).stdout ?? "";
-    const message = [description, stderr || stdout || (error as Error).message]
-      .filter(Boolean)
-      .join(": ");
+    const execError = error as Error & { stdout?: string; stderr?: string };
+    const output = execError.stderr || execError.stdout || "";
+    const message = [description, output || execError.message].filter(Boolean).join(": ");
     throw new Error(message);
   }
 }
@@ -75,7 +73,7 @@ async function transcribeAudio(filePath: string): Promise<string> {
 async function speak(text: string): Promise<void> {
   if (!ttsCommandTemplate) return;
 
-  const command = applyTemplate(ttsCommandTemplate, { text });
+  const command = applyTemplate(ttsCommandTemplate, { text: escapeShellArg(text) });
   try {
     await runCommand(command, "Speech playback failed");
   } catch (error) {

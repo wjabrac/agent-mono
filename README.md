@@ -109,7 +109,7 @@ For hands-free usage, the repo now includes a voice loop:
 
 ```bash
 VOICE_STT_COMMAND="whisper.cpp -f {file} -otxt --print-colors false" \
-VOICE_TTS_COMMAND="espeak -w /tmp/agent_reply.wav '{text}' && play /tmp/agent_reply.wav" \
+VOICE_TTS_COMMAND='tmpfile=$(mktemp /tmp/agent_reply_XXXX.wav); espeak -w "$tmpfile" {text}; play "$tmpfile"; rm -f "$tmpfile"' \
 VOICE_RECORD_COMMAND="ffmpeg -hide_banner -loglevel error -f alsa -i default -t 6 -ac 1 -ar 16000 {file}" \
 npm run voice
 ```
@@ -117,7 +117,8 @@ npm run voice
 - `VOICE_STT_COMMAND` (required) should output the transcription to stdout and
   must include the `{file}` placeholder for the recorded WAV file path.
 - `VOICE_TTS_COMMAND` (optional) should speak the `{text}` placeholder for the
-  agent reply; if unset the response is printed only.
+  agent reply; the `{text}` substitution is shell-escaped for safety. If unset,
+  the response is printed only.
 - `VOICE_RECORD_COMMAND` controls how audio is captured; the default expects
   `ffmpeg` with an ALSA device. Override it for macOS (e.g.,
   `ffmpeg -f avfoundation -i ":0" ...`) or other inputs. Adjust the duration
